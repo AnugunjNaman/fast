@@ -6,18 +6,34 @@ from sklearn.metrics import f1_score
 from loader import AudioDataset
 from tqdm import tqdm
 from fast_model import MobileViT as MVT
+from config import MConfig
+import argparse
 
 import warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
-language = "Hindi"
+parser = argparse.ArgumentParser(description='Audio classification training and testing script')
 
-num_epochs = 30
-learning_rate = 0.001
+# Add arguments
+parser.add_argument('--language', type=str, default='Hindi', help='Language for audio classification')
+parser.add_argument('--num_epochs', type=int, default=30, help='Number of epochs for training')
+parser.add_argument('--learning_rate', type=float, default=0.001, help='Learning rate for optimizer')
+parser.add_argument('--batch_size', type=int, default=16, help='Batch size for training and testing')
+parser.add_argument('--gpu_id', type=int, default=1, help='Node number GPU if available')
 
-batch_size = 16
+# Parse the arguments
+args = parser.parse_args()
 
-device = torch.device("cuda:4" if torch.cuda.is_available() else "cpu")
+# Display the arguments
+print("Arguments:")
+print("Language:", args.language)
+print("Number of Epochs:", args.num_epochs)
+print("Learning Rate:", args.learning_rate)
+print("Batch Size:", args.batch_size)
+print("GPU Enabled On:", args.gpu_id)
+
+
+device = torch.device(f"cuda:{args.gpu_id}" if torch.cuda.is_available() else "cpu")
 
 def train_epoch(model, dataloader, optimizer, criterion):
     model.train()
@@ -67,34 +83,40 @@ def save_model_weights(model, language, ff = 0):
 def load_weights(language, ff = 0):
     return torch.load(f'{language}_{ff}_ast_weights_epoch.pth', map_location=device)
 
-model = MVT(image_size = (128, 1536), dims = [96, 120, 144], channels = [16, 32, 48, 48, 64, 64, 80, 80, 96, 96, 384], num_classes=2)
-model = model.to(device)
-print(model)
+def main():
+    config = MConfig()
+    print("Configs of Model: ")
+    print(config)
+    
+    model = MVT()
+    model = model.to(device)
+    print(model)
 
-optimizer = optim.Adam(model.parameters(), lr=learning_rate)
-criterion = nn.CrossEntropyLoss()
-train_dataset = AudioDataset(f"data/files/SC_audio_{language}/", f"data/annotations/{language}_train.csv", hop_size=500)
-train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=2, pin_memory=True)  
+    optimizer = optim.Adam(model.parameters(), lr=args.learning_rate)
+    criterion = nn.CrossEntropyLoss()
+    train_dataset = AudioDataset(f"data/files/SC_audio_{args.language}/", f"data/annotations/{args.language}_train.csv", hop_size=500)
+    train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=2, pin_memory=True)  
 
-test_dataset = AudioDataset(f"data/files/SC_audio_{language}/", f"data/annotations/{language}_test.csv", hop_size=500)
-test_dataloader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True, num_workers=2, pin_memory=True)
+    test_dataset = AudioDataset(f"data/files/SC_audio_{args.language}/", f"data/annotations/{args.language}_test.csv", hop_size=500)
+    test_dataloader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=True, num_workers=2, pin_memory=True)
 
-print("Batch Size: ", batch_size)
+    acc = 0.0
+    for epoch in range(args.num_epochs):
+        train_loss = train_epoch(model, train_dataloader, optimizer, criterion)
+        test_accuracy, test_loss, test_f1 = test_model(model, test_dataloader, criterion)
+        train_accuracy, train_loss, train_f1 = test_model(model, train_dataloader, criterion)
+        if test_accuracy > acc:
+            acc = test_accuracy
+            save_model_weights(model, args.language, ff=1)
+        print(f'Epoch {epoch+1}/{args.num_epochs} Train Loss: {train_loss:.4f}, Train Accuracy: {train_accuracy:.4f}, Train F1: {train_f1:.4f}')
+        print(f'Epoch {epoch+1}/{args.num_epochs} Test Loss: {test_loss:.4f}, Test Accuracy: {test_accuracy:.4f}, Test F1: {test_f1:.4f}')
 
-acc = 0.0
-for epoch in range(num_epochs):
-    train_loss = train_epoch(model, train_dataloader, optimizer, criterion)
+    del model
+    checkpoint = load_weights(args.language, ff=1)
+    model = MVT(image_size = (128, 1536), dims = [96, 120, 144], channels = [16, 32, 48, 48, 64, 64, 80, 80, 96, 96, 384], num_classes=2)
+    model.load_state_dict(checkpoint)
     test_accuracy, test_loss, test_f1 = test_model(model, test_dataloader, criterion)
-    train_accuracy, train_loss, train_f1 = test_model(model, train_dataloader, criterion)
-    if test_accuracy > acc:
-        acc = test_accuracy
-        save_model_weights(model, language, ff=1)
-    print(f'Epoch {epoch+1}/{num_epochs} Train Loss: {train_loss:.4f}, Train Accuracy: {train_accuracy:.4f}, Train F1: {train_f1:.4f}')
-    print(f'Epoch {epoch+1}/{num_epochs} Test Loss: {test_loss:.4f}, Test Accuracy: {test_accuracy:.4f}, Test F1: {test_f1:.4f}')
+    print("Final Acc/F1: ", test_accuracy, test_f1)
 
-del model
-checkpoint = load_weights(language, ff=1)
-model = MVT(image_size = (128, 1536), dims = [96, 120, 144], channels = [16, 32, 48, 48, 64, 64, 80, 80, 96, 96, 384], num_classes=2)
-model.load_state_dict(checkpoint)
-test_accuracy, test_loss, test_f1 = test_model(model, test_dataloader, criterion)
-print("Final Acc/F1: ", test_accuracy, test_f1)
+if __name__=="__main__":
+    main()
