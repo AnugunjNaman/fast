@@ -4,7 +4,8 @@ import torch.nn as nn
 from einops import rearrange
 from einops.layers.torch import Reduce
 from config import MConfig
-# helpers
+from thop import profile
+
 
 def conv_1x1_bn(inp, oup):
     return nn.Sequential(
@@ -233,4 +234,9 @@ if __name__=="__main__":
     model = MobileViT(config)
     x = torch.randn(2, 1, 128, 384*5+1)
     x = x[:, :, :, :-1]
-    y = model(x)
+    y = torch.randint(0, 1, (2, 1)).squeeze()
+    flops, params = profile(model, inputs=(x,))
+
+    print(f"Total FLOPS: {flops}")
+    print(f"Total Parameters: {params}")
+

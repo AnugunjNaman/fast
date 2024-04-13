@@ -15,7 +15,7 @@ class ASTConfig:
     qkv_bias: bool = True
     frequency_stride: int = 10
     time_stride: int = 10
-    max_length: int = 782
+    max_length: int = 1876
     num_mel_bins: int = 128
     num_labels: int = 2
     alpha: float = 5e-6

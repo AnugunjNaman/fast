@@ -253,7 +253,7 @@ class ASTClassification(nn.Module):
 
 if __name__=="__main__":
     
-    x = torch.randn(2, 1, 128, 782)
+    x = torch.randn(2, 1, 128, 1876)
     y = torch.randint(0, 1, (2, 1)).squeeze()
     model = ASTClassification(config=ASTConfig())
 
