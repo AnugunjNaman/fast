@@ -1,1 +1,3 @@
-# sound_classification
+# FAST: Fast Audio Spectrogram Transformer
+
+
