@@ -5,7 +5,7 @@ from torch.utils.data import DataLoader
 from sklearn.metrics import f1_score
 from loader import AudioDataset
 from tqdm import tqdm
-from model import MobileViT as MVT
+from fast_model import MobileViT as MVT
 
 import warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)

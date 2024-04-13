@@ -1,9 +1,8 @@
 import torch
-import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
 from sklearn.metrics import f1_score
-from fmodel import ASTClassification
+from ast_model import ASTClassification
 from config import ASTConfig
 from loader import AudioDataset
 
