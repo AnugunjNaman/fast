@@ -73,10 +73,10 @@ print(model)
 
 optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 criterion = nn.CrossEntropyLoss()
-train_dataset = AudioDataset(f"data/files/SC_audio_{language}/", f"data/annotations/{language}_train.csv")
+train_dataset = AudioDataset(f"data/files/SC_audio_{language}/", f"data/annotations/{language}_train.csv", hop_size=500)
 train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=2, pin_memory=True)  
 
-test_dataset = AudioDataset(f"data/files/SC_audio_{language}/", f"data/annotations/{language}_test.csv")
+test_dataset = AudioDataset(f"data/files/SC_audio_{language}/", f"data/annotations/{language}_test.csv", hop_size=500)
 test_dataloader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True, num_workers=2, pin_memory=True)
 
 print("Batch Size: ", batch_size)

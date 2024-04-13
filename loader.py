@@ -38,9 +38,10 @@ def get_melspectrogram_db_s(file_path, sr=None, target_time_resolution=1920, tar
 
 
 class AudioDataset(Dataset):
-    def __init__(self, folder_name, annotations_file):  
+    def __init__(self, folder_name, annotations_file, hop_size=512):  
         self.folder_name = folder_name
         self.annotations = pd.read_csv(annotations_file)
+        self.hop_size = hop_size
 
     def __len__(self):
         return len(self.annotations)
@@ -48,7 +49,7 @@ class AudioDataset(Dataset):
     def __getitem__(self, idx):
         filename = self.folder_name + self.annotations.iloc[idx, 0]
         cls = self.annotations.iloc[idx, 1]
-        melspec = spec_to_image(get_melspectrogram_db(filename))[np.newaxis,...]
+        melspec = spec_to_image(get_melspectrogram_db(filename, hop_length=self.hop_size))[np.newaxis,...]
         return melspec, torch.tensor(int(cls == "Yes"))  # Convert label to tensor
 
 
