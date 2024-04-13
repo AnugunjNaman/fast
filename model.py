@@ -3,7 +3,7 @@ import torch.nn as nn
 
 from einops import rearrange
 from einops.layers.torch import Reduce
-
+from config import MConfig
 # helpers
 
 def conv_1x1_bn(inp, oup):
@@ -175,57 +175,46 @@ class MobileViT(nn.Module):
     Paper: https://arxiv.org/abs/2110.02178
     Based on: https://github.com/chinhsuanwu/mobilevit-pytorch
     """
-
-    def __init__(
-        self,
-        image_size,
-        dims,
-        channels,
-        num_classes,
-        expansion=4,
-        kernel_size=3,
-        patch_size=(2, 2),
-        depths=(2, 4, 4)
-    ):
+    def __init__(self, config):
         super().__init__()
-        
-        ih, iw = image_size
-        ph, pw = patch_size
+        self.config = config
+        ih, iw = self.config.image_size
+        ph, pw = self.config.patch_size
         assert ih % ph == 0 and iw % pw == 0
 
-        init_dim, *_, last_dim = channels
+        init_dim, *_, last_dim = self.config.channels
 
         self.conv1 = conv_nxn_bn(1, init_dim, stride=2)
 
         self.stem = nn.ModuleList([])
-        self.stem.append(MV2Block(channels[0], channels[1], 1, expansion))
-        self.stem.append(MV2Block(channels[1], channels[2], 2, expansion))
-        self.stem.append(MV2Block(channels[2], channels[3], 1, expansion))
-        self.stem.append(MV2Block(channels[2], channels[3], 1, expansion))
+        self.stem.append(MV2Block(self.config.channels[0], self.config.channels[1], 1, self.config.expansion))
+        self.stem.append(MV2Block(self.config.channels[1], self.config.channels[2], 2, self.config.expansion))
+        self.stem.append(MV2Block(self.config.channels[2], self.config.channels[3], 1, self.config.expansion))
+        self.stem.append(MV2Block(self.config.channels[2], self.config.channels[3], 1, self.config.expansion))
 
         self.trunk = nn.ModuleList([])
         self.trunk.append(nn.ModuleList([
-            MV2Block(channels[3], channels[4], 2, expansion),
-            MobileViTBlock(dims[0], depths[0], channels[5],
-                           kernel_size, patch_size, int(dims[0] * 2))
+            MV2Block(self.config.channels[3], self.config.channels[4], 2, self.config.expansion),
+            MobileViTBlock(self.config.hidden_dims[0], self.config.depths[0], self.config.channels[5],
+                           self.config.kernel_size, self.config.patch_size, int(self.config.hidden_dims[0] * 2))
         ]))
 
         self.trunk.append(nn.ModuleList([
-            MV2Block(channels[5], channels[6], 2, expansion),
-            MobileViTBlock(dims[1], depths[1], channels[7],
-                           kernel_size, patch_size, int(dims[1] * 4))
+            MV2Block(self.config.channels[5], self.config.channels[6], 2, self.config.expansion),
+            MobileViTBlock(self.config.hidden_dims[1], self.config.depths[1], self.config.channels[7],
+                           self.config.kernel_size, self.config.patch_size, int(self.config.hidden_dims[1] * 4))
         ]))
 
         self.trunk.append(nn.ModuleList([
-            MV2Block(channels[7], channels[8], 2, expansion),
-            MobileViTBlock(dims[2], depths[2], channels[9],
-                           kernel_size, patch_size, int(dims[2] * 4))
+            MV2Block(self.config.channels[7], self.config.channels[8], 2, self.config.expansion),
+            MobileViTBlock(self.config.hidden_dims[2], self.config.depths[2], self.config.channels[9],
+                           self.config.kernel_size, self.config.patch_size, int(self.config.hidden_dims[2] * 4))
         ]))
 
         self.to_logits = nn.Sequential(
-            conv_1x1_bn(channels[-2], last_dim),
+            conv_1x1_bn(self.config.channels[-2], last_dim),
             Reduce('b c h w -> b c', 'mean'),
-            nn.Linear(channels[-1], num_classes, bias=False)
+            nn.Linear(self.config.channels[-1], self.config.num_classes, bias=False)
         )
 
     def forward(self, x):
@@ -240,7 +229,8 @@ class MobileViT(nn.Module):
 
 if __name__=="__main__":
     # torch.Size([16, 1, 128, 1876])
-    model = MobileViT(image_size = (128, 1876), dims = [96, 128, 144], channels = [16, 32, 48, 48, 64, 64, 80, 80, 96, 96, 384], num_classes=2)
+    config = MConfig()
+    model = MobileViT(config)
     x = torch.randn(2, 1, 128, 384*5+1)
     x = x[:, :, :, :-1]
     y = model(x)
