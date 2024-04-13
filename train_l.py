@@ -26,7 +26,7 @@ def train_epoch(model, dataloader, optimizer, criterion):
     for inputs, labels in tqdm(dataloader):
         inputs, labels = inputs.to(device), labels.to(device)
         optimizer.zero_grad()
-        outputs = model(inputs)
+        outputs = model(inputs.float())
         loss = criterion(outputs.view(-1, 2), labels.view(-1))
         loss.backward()
         optimizer.step()
@@ -45,7 +45,7 @@ def test_model(model, dataloader):
     with torch.no_grad():
         for inputs, targets in tqdm(dataloader):
             inputs, targets = inputs.to(device), targets.to(device)
-            outputs = model(inputs)
+            outputs = model(inputs.float())
             loss = criterion(outputs.view(-1, 2), targets.view(-1))
             total_loss += loss.item()
 
@@ -68,7 +68,7 @@ def load_weights(language, ff = 0):
     return torch.load(f'{language}_{ff}_ast_weights_epoch.pth', map_location=device)
 
 model = MVT(image_size = (128, 1536), dims = [96, 120, 144], channels = [16, 32, 48, 48, 64, 64, 80, 80, 96, 96, 384], num_classes=2)
-model.to(device)
+model = model.to(device)
 print(model)
 
 optimizer = optim.Adam(model.parameters(), lr=learning_rate)

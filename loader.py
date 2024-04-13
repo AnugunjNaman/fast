@@ -24,7 +24,6 @@ def get_melspectrogram_db(file_path, sr = None, n_fft = 2048, hop_length = 512, 
         wav=wav[: 60 * sr]
     spec = librosa.feature.melspectrogram(wav, sr = sr, n_fft = n_fft, hop_length = hop_length, n_mels = n_mels, fmin=fmin, fmax=fmax)
     spec_db = librosa.power_to_db(spec, top_db = top_db)
-    print(spec_db.shape, wav.shape)
     return spec_db
 
 class AudioDataset(Dataset):

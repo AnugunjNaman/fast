@@ -207,10 +207,8 @@ class ASTModel(nn.Module):
             raise ValueError("You have to specify input_values")
         
         embedding_output = self.embeddings(input_values)
-        print(embedding_output.shape)
         encoder_outputs, aux_loss = self.encoder(embedding_output)
         sequence_output = encoder_outputs[0]
-        print(sequence_output.shape)
         sequence_output = self.layernorm(sequence_output)
         pooled_output = (sequence_output[:, 0] + sequence_output[:, 1]) / 2
         return (sequence_output, pooled_output) + encoder_outputs[1:], aux_loss

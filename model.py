@@ -230,7 +230,6 @@ class MobileViT(nn.Module):
 
     def forward(self, x):
         x = self.conv1(x)
-        print(x.shape)
         for conv in self.stem:
             x = conv(x)
 
