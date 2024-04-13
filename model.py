@@ -185,7 +185,7 @@ class MobileViT(nn.Module):
         expansion=4,
         kernel_size=3,
         patch_size=(2, 2),
-        depths=(2, 4, 3)
+        depths=(2, 4, 4)
     ):
         super().__init__()
         
@@ -232,9 +232,14 @@ class MobileViT(nn.Module):
         x = self.conv1(x)
         for conv in self.stem:
             x = conv(x)
-
         for conv, attn in self.trunk:
             x = conv(x)
             x = attn(x)
-
+        
         return self.to_logits(x)
+
+if __name__=="__main__":
+    # torch.Size([16, 1, 128, 1876])
+    model = MobileViT(image_size = (128, 1876), dims = [96, 128, 144], channels = [16, 32, 48, 48, 64, 64, 80, 80, 96, 96, 384], num_classes=2)
+    x = torch.randn(2, 1, 128, 384*5)
+    y = model(x)
