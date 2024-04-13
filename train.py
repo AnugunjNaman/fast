@@ -115,6 +115,7 @@ def main():
     checkpoint = load_weights(args.language, ff=1)
     model = ASTClassification(config=config)
     model.load_state_dict(checkpoint)
+    model = model.to(device)
     test_accuracy, test_loss, test_f1 = test_model(model, test_dataloader, criterion)
     print("Final Acc/F1: ", test_accuracy, test_f1)
 
