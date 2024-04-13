@@ -241,5 +241,6 @@ class MobileViT(nn.Module):
 if __name__=="__main__":
     # torch.Size([16, 1, 128, 1876])
     model = MobileViT(image_size = (128, 1876), dims = [96, 128, 144], channels = [16, 32, 48, 48, 64, 64, 80, 80, 96, 96, 384], num_classes=2)
-    x = torch.randn(2, 1, 128, 384*5)
+    x = torch.randn(2, 1, 128, 384*5+1)
+    x = x[:, :, :, :-1]
     y = model(x)

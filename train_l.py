@@ -26,7 +26,7 @@ def train_epoch(model, dataloader, optimizer, criterion):
     for inputs, labels in tqdm(dataloader):
         inputs, labels = inputs.to(device), labels.to(device)
         optimizer.zero_grad()
-        outputs = model(inputs.float())
+        outputs = model(inputs.float()[:, :, :, :-1])
         loss = criterion(outputs.view(-1, 2), labels.view(-1))
         loss.backward()
         optimizer.step()
@@ -35,7 +35,7 @@ def train_epoch(model, dataloader, optimizer, criterion):
     average_loss = total_loss / len(dataloader)
     return average_loss
 
-def test_model(model, dataloader):
+def test_model(model, dataloader, criterion):
     model.eval()
     correct_predictions = 0
     total_samples = 0
@@ -45,7 +45,7 @@ def test_model(model, dataloader):
     with torch.no_grad():
         for inputs, targets in tqdm(dataloader):
             inputs, targets = inputs.to(device), targets.to(device)
-            outputs = model(inputs.float())
+            outputs = model(inputs.float()[:, :, :, :-1])
             loss = criterion(outputs.view(-1, 2), targets.view(-1))
             total_loss += loss.item()
 
