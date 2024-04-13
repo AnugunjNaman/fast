@@ -78,17 +78,17 @@ def test_model(model, dataloader, criterion):
     return accuracy, average_loss, f1
 
 def save_model_weights(model, language, ff = 0):
-    torch.save(model.state_dict(), f'{language}_{ff}_ast_weights_epoch.pth') 
+    torch.save(model.state_dict(), f'saves/fast/{language}_{ff}_ast_weights_epoch.pth') 
 
 def load_weights(language, ff = 0):
-    return torch.load(f'{language}_{ff}_ast_weights_epoch.pth', map_location=device)
+    return torch.load(f'saves/fast/{language}_{ff}_ast_weights_epoch.pth', map_location=device)
 
 def main():
     config = MConfig()
     print("Configs of Model: ")
     print(config)
     
-    model = MVT()
+    model = MVT(config=config)
     model = model.to(device)
     print(model)
 
@@ -113,7 +113,7 @@ def main():
 
     del model
     checkpoint = load_weights(args.language, ff=1)
-    model = MVT(image_size = (128, 1536), dims = [96, 120, 144], channels = [16, 32, 48, 48, 64, 64, 80, 80, 96, 96, 384], num_classes=2)
+    model = MVT(config=config)
     model.load_state_dict(checkpoint)
     test_accuracy, test_loss, test_f1 = test_model(model, test_dataloader, criterion)
     print("Final Acc/F1: ", test_accuracy, test_f1)
