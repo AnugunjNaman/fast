@@ -5,7 +5,7 @@ from torch.utils.data import DataLoader
 from sklearn.metrics import f1_score
 from loader import AudioDataset
 from tqdm import tqdm
-from fast_model import MobileViT as MVT
+from fast_model import FastAST
 from config import MConfig
 import argparse
 
@@ -113,7 +113,7 @@ def main():
 
     del model
     checkpoint = load_weights(args.language, ff=1)
-    model = MVT(config=config)
+    model = FastAST(config=config)
     model.load_state_dict(checkpoint)
     model = model.to(device)
     test_accuracy, test_loss, test_f1 = test_model(model, test_dataloader, criterion)
