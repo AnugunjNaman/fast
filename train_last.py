@@ -6,7 +6,7 @@ from sklearn.metrics import f1_score
 from loader import AudioDataset
 from tqdm import tqdm
 from last_model import LastAST
-from config import MConfig
+from config import LastConfig
 import argparse
 
 import warnings
@@ -84,11 +84,11 @@ def load_weights(language, ff = 0):
     return torch.load(f'saves/fast/{language}_{ff}_ast_weights_epoch.pth', map_location=device)
 
 def main():
-    config = MConfig()
+    config = LastConfig()
     print("Configs of Model: ")
     print(config)
     
-    model = MVT(config=config)
+    model = LastAST(config=config)
     model = model.to(device)
     print(model)
 
