@@ -26,7 +26,7 @@ def conv_nxn_bn(inp, oup, kernel_size=3, stride=1):
 class FeedForward(nn.Module):
     def __init__(self, dim, hidden_dim, dropout=0.):
         super().__init__()
-        self.net = nn.Sequential(
+        self.ff = nn.Sequential(
             nn.LayerNorm(dim),
             nn.Linear(dim, hidden_dim),
             nn.SiLU(),
@@ -36,7 +36,7 @@ class FeedForward(nn.Module):
         )
 
     def forward(self, x):
-        return self.net(x)
+        return self.ff(x)
 
 class Attention(nn.Module):
     def __init__(self, dim, heads=8, dim_head=64, dropout=0.):
@@ -72,11 +72,6 @@ class Attention(nn.Module):
         return self.to_out(out)
 
 class Transformer(nn.Module):
-    """Transformer block described in ViT.
-    Paper: https://arxiv.org/abs/2010.11929
-    Based on: https://github.com/lucidrains/vit-pytorch
-    """
-
     def __init__(self, dim, depth, heads, dim_head, mlp_dim, dropout=0.):
         super().__init__()
         self.layers = nn.ModuleList([])
@@ -92,12 +87,7 @@ class Transformer(nn.Module):
             x = ff(x) + x
         return x
 
-class MV2Block(nn.Module):
-    """MV2 block described in MobileNetV2.
-    Paper: https://arxiv.org/pdf/1801.04381
-    Based on: https://github.com/tonylins/pytorch-mobilenet-v2
-    """
-
+class FastConvLayer(nn.Module):
     def __init__(self, inp, oup, stride=1, expansion=4):
         super().__init__()
         self.stride = stride
@@ -139,7 +129,7 @@ class MV2Block(nn.Module):
             out = out + x
         return out
 
-class MobileViTBlock(nn.Module):
+class FastASTLayer(nn.Module):
     def __init__(self, dim, depth, channel, kernel_size, patch_size, mlp_dim, dropout=0.):
         super().__init__()
         self.ph, self.pw = patch_size
@@ -171,11 +161,7 @@ class MobileViTBlock(nn.Module):
         x = self.conv4(x)
         return x
 
-class MobileViT(nn.Module):
-    """MobileViT.
-    Paper: https://arxiv.org/abs/2110.02178
-    Based on: https://github.com/chinhsuanwu/mobilevit-pytorch
-    """
+class FastAST(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -188,27 +174,27 @@ class MobileViT(nn.Module):
         self.conv1 = conv_nxn_bn(1, init_dim, stride=2)
 
         self.stem = nn.ModuleList([])
-        self.stem.append(MV2Block(self.config.channels[0], self.config.channels[1], 1, self.config.expansion))
-        self.stem.append(MV2Block(self.config.channels[1], self.config.channels[2], 2, self.config.expansion))
-        self.stem.append(MV2Block(self.config.channels[2], self.config.channels[3], 1, self.config.expansion))
-        self.stem.append(MV2Block(self.config.channels[2], self.config.channels[3], 1, self.config.expansion))
+        self.stem.append(FastConvLayer(self.config.channels[0], self.config.channels[1], 1, self.config.expansion))
+        self.stem.append(FastConvLayer(self.config.channels[1], self.config.channels[2], 2, self.config.expansion))
+        self.stem.append(FastConvLayer(self.config.channels[2], self.config.channels[3], 1, self.config.expansion))
+        self.stem.append(FastConvLayer(self.config.channels[2], self.config.channels[3], 1, self.config.expansion))
 
         self.trunk = nn.ModuleList([])
         self.trunk.append(nn.ModuleList([
-            MV2Block(self.config.channels[3], self.config.channels[4], 2, self.config.expansion),
-            MobileViTBlock(self.config.hidden_dims[0], self.config.depths[0], self.config.channels[5],
+            FastConvLayer(self.config.channels[3], self.config.channels[4], 2, self.config.expansion),
+            FastASTLayer(self.config.hidden_dims[0], self.config.depths[0], self.config.channels[5],
                            self.config.kernel_size, self.config.patch_size, int(self.config.hidden_dims[0] * 2))
         ]))
 
         self.trunk.append(nn.ModuleList([
-            MV2Block(self.config.channels[5], self.config.channels[6], 2, self.config.expansion),
-            MobileViTBlock(self.config.hidden_dims[1], self.config.depths[1], self.config.channels[7],
+            FastConvLayer(self.config.channels[5], self.config.channels[6], 2, self.config.expansion),
+            FastASTLayer(self.config.hidden_dims[1], self.config.depths[1], self.config.channels[7],
                            self.config.kernel_size, self.config.patch_size, int(self.config.hidden_dims[1] * 4))
         ]))
 
         self.trunk.append(nn.ModuleList([
-            MV2Block(self.config.channels[7], self.config.channels[8], 2, self.config.expansion),
-            MobileViTBlock(self.config.hidden_dims[2], self.config.depths[2], self.config.channels[9],
+            FastConvLayer(self.config.channels[7], self.config.channels[8], 2, self.config.expansion),
+            FastASTLayer(self.config.hidden_dims[2], self.config.depths[2], self.config.channels[9],
                            self.config.kernel_size, self.config.patch_size, int(self.config.hidden_dims[2] * 4))
         ]))
 
@@ -231,7 +217,7 @@ class MobileViT(nn.Module):
 if __name__=="__main__":
     # torch.Size([16, 1, 128, 1876])
     config = MConfig()
-    model = MobileViT(config)
+    model = FastAST(config)
     x = torch.randn(2, 1, 128, 384*5+1)
     x = x[:, :, :, :-1]
     y = torch.randint(0, 1, (2, 1)).squeeze()
