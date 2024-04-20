@@ -78,10 +78,10 @@ def test_model(model, dataloader, criterion):
     return accuracy, average_loss, f1
 
 def save_model_weights(model, language, ff = 0):
-    torch.save(model.state_dict(), f'saves/fast/{language}_{ff}_ast_weights_epoch.pth') 
+    torch.save(model.state_dict(), f'saves/last/{language}_{ff}_ast_weights_epoch.pth') 
 
 def load_weights(language, ff = 0):
-    return torch.load(f'saves/fast/{language}_{ff}_ast_weights_epoch.pth', map_location=device)
+    return torch.load(f'saves/last/{language}_{ff}_ast_weights_epoch.pth', map_location=device)
 
 def main():
     config = LastConfig()
