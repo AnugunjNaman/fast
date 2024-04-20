@@ -27,15 +27,6 @@ def get_melspectrogram_db(file_path, sr = None, n_fft = 2048, hop_length = 500, 
     spec_db = librosa.power_to_db(spec, top_db = top_db)
     return spec_db
 
-def get_melspectrogram_db_s(file_path, sr=None, target_time_resolution=1920, target_frequency_resolution=128, fmin=0, fmax=8000, top_db=80):
-    wav, sr = librosa.load(file_path, sr=sr)
-    hop_length = int(60 * sr / target_time_resolution)
-    n_fft = int(2 ** np.ceil(np.log2(target_frequency_resolution * sr / hop_length)))
-    n_mels = target_frequency_resolution
-    spec = librosa.feature.melspectrogram(wav, sr=sr, n_fft=n_fft, hop_length=hop_length, n_mels=n_mels, fmin=fmin, fmax=fmax)
-    spec_db = librosa.power_to_db(spec, ref=np.max, top_db=top_db)
-    return spec_db
-
 
 class AudioDataset(Dataset):
     def __init__(self, folder_name, annotations_file, hop_size=512):  
