@@ -102,8 +102,8 @@ class Transformer(nn.Module):
 
     def forward(self, x):
         for attn, ff in self.layers:
-            x = attn(x) + x
-            x = ff(x) + x
+            x = 0.2 * attn(x) + x
+            x = 0.2 * ff(x) + x
         return x
 
 class LastConvLayer(nn.Module):
@@ -145,7 +145,7 @@ class LastConvLayer(nn.Module):
     def forward(self, x):
         out = self.conv(x)
         if self.use_res_connect:
-            out = out + x
+            out = 0.2 * out + x
         return out
 
 class LastASTLayer(nn.Module):
@@ -171,7 +171,7 @@ class LastASTLayer(nn.Module):
         # Global representations
         _, _, h, w = x.shape
         x = rearrange(x, 'b d (h ph) (w pw) -> b (ph pw) (h w) d', ph=self.ph, pw=self.pw)
-        x = self.transformer(x) + x       
+        x = 0.2 * self.transformer(x) + x       
         x = rearrange(x, 'b (ph pw) (h w) d -> b d (h ph) (w pw)', h=h//self.ph, w=w//self.pw, ph=self.ph, pw=self.pw)
 
         # Fusion
