@@ -29,14 +29,14 @@ class CenterNorm(nn.Module):
 def conv_1x1_bn(inp, oup):
     return nn.Sequential(
         nn.Conv2d(inp, oup, 1, 1, 0, bias=False),
-        nn.BatchNorm2d(oup),
+        CenterNorm(oup, channels_first=True),
         nn.SiLU()
     )
 
 def conv_nxn_bn(inp, oup, kernel_size=3, stride=1):
     return nn.Sequential(
         nn.Conv2d(inp, oup, kernel_size, stride, 1, bias=False),
-        nn.BatchNorm2d(oup),
+        CenterNorm(oup, channels_first=True),
         nn.SiLU()
     )
 
@@ -120,26 +120,26 @@ class FastConvLayer(nn.Module):
                 # dw
                 nn.Conv2d(hidden_dim, hidden_dim, 3, stride,
                           1, groups=hidden_dim, bias=False),
-                nn.BatchNorm2d(hidden_dim),
+                CenterNorm(hidden_dim, channels_first=True),
                 nn.SiLU(),
                 # pw-linear
                 nn.Conv2d(hidden_dim, oup, 1, 1, 0, bias=False),
-                nn.BatchNorm2d(oup),
+                CenterNorm(oup, channels_first=True),
             )
         else:
             self.conv = nn.Sequential(
                 # pw
                 nn.Conv2d(inp, hidden_dim, 1, 1, 0, bias=False),
-                nn.BatchNorm2d(hidden_dim),
+                CenterNorm(hidden_dim, channels_first=True),
                 nn.SiLU(),
                 # dw
                 nn.Conv2d(hidden_dim, hidden_dim, 3, stride,
                           1, groups=hidden_dim, bias=False),
-                nn.BatchNorm2d(hidden_dim),
+                CenterNorm(hidden_dim, channels_first=True),
                 nn.SiLU(),
                 # pw-linear
                 nn.Conv2d(hidden_dim, oup, 1, 1, 0, bias=False),
-                nn.BatchNorm2d(oup),
+                CenterNorm(oup, channels_first=True),
             )
 
     def forward(self, x):
