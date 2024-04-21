@@ -66,7 +66,7 @@ class FeedForward(nn.Module):
     def __init__(self, dim, hidden_dim, dropout=0.):
         super().__init__()
         self.ff = nn.Sequential(
-            CenterNorm(dim),
+            nn.LayerNorm(dim),
             nn.Linear(dim, hidden_dim),
             nn.SiLU(),
             nn.Dropout(dropout),
@@ -84,7 +84,7 @@ class Attention(nn.Module):
         inner_dim = dim_head * heads
         self.heads = heads
         self.scale = dim_head ** -0.5
-        self.norm = CenterNorm(dim)
+        self.norm = nn.LayerNorm(dim)
         self.attend = nn.Softmax(dim=-1)
         self.dropout = nn.Dropout(dropout)
 
