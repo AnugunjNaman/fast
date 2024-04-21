@@ -80,8 +80,7 @@ class Attention(nn.Module):
         qkv = self.to_qkv(x).chunk(3, dim=-1)
 
         q, k, v = map(lambda t: rearrange(t, 'b p n (h d) -> b p h n d', h=self.heads), qkv)
-        q, k = F.normalize(q, dim=-1), F.normalize(k, dim=-1)
-        
+
         dots = torch.matmul(q, k.transpose(-1, -2)) * self.scale
 
         attn = self.attend(dots)
@@ -172,7 +171,7 @@ class LastASTLayer(nn.Module):
         # Global representations
         _, _, h, w = x.shape
         x = rearrange(x, 'b d (h ph) (w pw) -> b (ph pw) (h w) d', ph=self.ph, pw=self.pw)
-        x = self.transformer(x)        
+        x = self.transformer(x) + x       
         x = rearrange(x, 'b (ph pw) (h w) d -> b d (h ph) (w pw)', h=h//self.ph, w=w//self.pw, ph=self.ph, pw=self.pw)
 
         # Fusion
@@ -223,7 +222,7 @@ class LastAST(nn.Module):
             Reduce('b c h w -> b c', 'mean'),
             nn.Linear(self.config.channels[-1], self.config.num_classes, bias=False)
         )
-    
+
     def forward(self, x):
         x = self.conv1(x)
         for conv in self.stem:
