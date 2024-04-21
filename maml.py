@@ -4,12 +4,46 @@ import numpy as np
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 from torch.autograd import grad
+import copy
 
 
 def mlp(x, params):
     h = torch.relu(torch.nn.functional.linear(x, params[0], bias=params[1]))
     h = torch.relu(torch.nn.functional.linear(h, params[2], bias=params[3]))
     return torch.nn.functional.linear(h, params[4], bias=params[5])
+
+
+class MLP(nn.Module):
+    def __init__(self, in_dims, out_dims, hidden_dims=None, 
+                 dimension_progression=None) -> None:
+        super().__init__()  # torch stuff
+        if dimension_progression is None:
+            dimension_progression = MLP.dim_prog(in_dims, out_dims, hidden_dims)
+        assert len(dimension_progression) >= 2
+        # There will always be an output layer
+        output_layer = nn.Linear(dimension_progression[-2], out_dims, bias=True)
+        # Create hidden layers (if any)
+        # NOTE: If no hidden layers, this is linear regression and technically not an MLP
+        exclude_out_dim = dimension_progression[:-1]    # Last element is [-2]
+        hidden_layers = []
+        if len(exclude_out_dim) >= 1:
+            # There are hidden layers!
+            for layer_in_dim, layer_out_dim in zip(exclude_out_dim[:-1], exclude_out_dim[1:]):
+                hidden_layers.append(nn.Linear(layer_in_dim, layer_out_dim, bias=True))
+                hidden_layers.append(nn.ReLU())     # Add activation with each hidden layer
+        # Final combined sequence of layers, for use
+        self.sequential = nn.Sequential(*hidden_layers, output_layer)
+    
+    def dim_prog(in_dims, out_dims, hidden_dims=None, features=None):
+        if features is not None:
+            in_dims = features.shape[-1]
+        if hidden_dims is None:
+            hidden_dims = []
+        return [in_dims] + hidden_dims + [out_dims]
+    
+    def forward(self, input):
+        # input: (batch, in_dims)
+        return self.sequential(input)
 
 
 def perform_k_training_steps(params, task, batch_size, inner_training_steps, alpha, device):
@@ -22,6 +56,17 @@ def perform_k_training_steps(params, task, batch_size, inner_training_steps, alp
         gradients = grad(loss, params)
         for p, g in zip(params, gradients):  # Grad step
             p.data -= alpha * g
+
+
+def perform_k_training_steps_model(model, task, batch_size, inner_training_steps, alpha, device):
+    model.train()
+    optimizer = nn.optim.Adam(model.parameters(), lr=alpha)
+    for _ in range(inner_training_steps):
+        optimizer.zero_grad()
+        x_batch, y_batch, loss_fct = task.sample(batch_size)
+        loss = loss_fct(model(x_batch.to(device)), y_batch.to(device))
+        loss.backward()
+        optimizer.step()
 
 
 class Task:
@@ -52,6 +97,10 @@ def clone_detach_regrad_params(params_list):
     # return [torch.tensor(param, requires_grad=True) for param in params_list]
     return [param.clone().detach().requires_grad_(True) for param in params_list]
 
+def clone_model(model):
+    # model2.load_state_dict(model1.state_dict())
+    cloned = copy.deepcopy(model)
+    return cloned
 
 def manual_zero_grad(params_list):
     for param in params_list:
@@ -124,6 +173,7 @@ def perform_MAML_on_thetas(thetas, alpha, beta, K_inner_train, K_outer_test, n_e
         training_loss_dict[i_epoch] = meta_loss
     
     # NOTE: Algo 2 Line 11
+    return training_loss_dict
 
 
 ################################################################################
@@ -138,8 +188,9 @@ if __name__ == "__main__":
         MY_DEVICE = torch.device('cpu')
     ALPHA = 1e-3    # Inner learning rate
     BETA = 1e-3     # Meta-update learning rate
-    K = 10  # Inner/meta batch size
-    N_EPOCHS = 5_000
+    K_INNER = 10  # Inner/meta batch size
+    K_OUTER = 25
+    N_EPOCHS = 70_000
     # N_INNER_EPOCHS = 1    # Just take 1 step for each task in the inner
     ############################################################################
     # Init params (xavier_uniform) for 3 linear layers (weights and biases, 2 apiece)
@@ -157,8 +208,8 @@ if __name__ == "__main__":
     thetas = clone_detach_regrad_params(THETAS)     # Preserve original THETAS so we can work with it
     alpha = ALPHA
     beta = BETA
-    K_inner_train = K
-    K_outer_test = K
+    K_inner_train = K_INNER
+    K_outer_test = K_OUTER
     n_epochs = N_EPOCHS
     my_device = MY_DEVICE
     ret_losses = perform_MAML_on_thetas(thetas, alpha, beta, K_inner_train, K_outer_test, n_epochs, my_device)
