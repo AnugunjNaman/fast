@@ -103,7 +103,7 @@ class Attention(nn.Module):
         # q = F.normalize(q, p=2.0, dim=-1)
         # k = F.normalize(k, p=2.0, dim=-1)
 
-        dots = 10.0 * torch.matmul(q, k.transpose(-1, -2)) * self.scale
+        dots = torch.matmul(q, k.transpose(-1, -2)) * self.scale
 
         attn = self.attend(dots)
         attn = self.dropout(attn)
