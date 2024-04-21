@@ -80,6 +80,7 @@ class Attention(nn.Module):
         qkv = self.to_qkv(x).chunk(3, dim=-1)
 
         q, k, v = map(lambda t: rearrange(t, 'b p n (h d) -> b p h n d', h=self.heads), qkv)
+        q, k = F.normalize(q, dim=-1), F.normalize(k, dim=-1)
         
         dots = torch.matmul(q, k.transpose(-1, -2)) * self.scale
 
@@ -223,29 +224,6 @@ class LastAST(nn.Module):
             nn.Linear(self.config.channels[-1], self.config.num_classes, bias=False)
         )
     
-        self.apply(self._spectral_init)
-    
-    def _spectral_init(self, m):
-        if isinstance(m, nn.Linear):
-            #torch.nn.init.orthogonal_(m.weight, gain=1)
-            torch.nn.init.xavier_normal_(m.weight)
-            if isinstance(m, nn.Linear) and m.bias is not None:
-                nn.init.constant_(m.bias, 0)
-
-            u,s,v = torch.svd(m.weight)
-            m.weight.data = 1.0*m.weight.data/s[0]
-
-        elif isinstance(m, (nn.Conv2d)):
-            #torch.nn.init.orthogonal_(m.weight, gain=1)
-            torch.nn.init.xavier_normal_(m.weight)
-            weight = torch.reshape(m.weight.data, (m.weight.data.shape[0], -1))
-            u,s,v = torch.svd(weight)
-            m.weight.data = m.weight.data/s[0]
-
-        elif isinstance(m, (nn.LayerNorm, CenterNorm, nn.BatchNorm2d)):
-            nn.init.constant_(m.bias, 0)
-            nn.init.constant_(m.weight, 1.0)
-
     def forward(self, x):
         x = self.conv1(x)
         for conv in self.stem:
