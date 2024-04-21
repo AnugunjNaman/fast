@@ -8,6 +8,7 @@ from tqdm import tqdm
 from fast_model import FastAST
 from config import FastConfig
 import argparse
+import matplotlib.pyplot as plt
 
 import warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)
@@ -101,6 +102,7 @@ def main():
     test_dataloader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=True, num_workers=2, pin_memory=True)
 
     acc = 0.0
+    train_losses, test_losses = [], []
     for epoch in range(args.num_epochs):
         train_loss = train_epoch(model, train_dataloader, optimizer, criterion)
         test_accuracy, test_loss, test_f1 = test_model(model, test_dataloader, criterion)
@@ -108,8 +110,22 @@ def main():
         if test_accuracy > acc:
             acc = test_accuracy
             save_model_weights(model, args.language, ff=1)
+        
+        train_losses.append(train_loss)
+        test_losses.append(test_loss)
         print(f'Epoch {epoch+1}/{args.num_epochs} Train Loss: {train_loss:.4f}, Train Accuracy: {train_accuracy:.4f}, Train F1: {train_f1:.4f}')
         print(f'Epoch {epoch+1}/{args.num_epochs} Test Loss: {test_loss:.4f}, Test Accuracy: {test_accuracy:.4f}, Test F1: {test_f1:.4f}')
+
+
+    plt.figure(figsize=(10, 5))
+    plt.plot(train_losses, label='Train Loss')
+    plt.plot(test_losses, label='Test Loss')
+    plt.title(f'Training and Testing Loss per Epoch for {args.language}')
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss')
+    plt.legend()
+    plt.grid(True)
+    plt.savefig(f"saves/plots/loss_mono_{args.language}")
 
     del model
     checkpoint = load_weights(args.language, ff=1)
