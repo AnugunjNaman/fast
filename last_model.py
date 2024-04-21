@@ -143,7 +143,7 @@ class LastConvLayer(nn.Module):
                 # dw
                 nn.Conv2d(hidden_dim, hidden_dim, 3, stride,
                           1, groups=hidden_dim, bias=False),
-                CenterNorm(hidden_dim, channels_first=True),
+                nn.BatchNorm2d(hidden_dim),
                 nn.SiLU(),
                 # pw-linear
                 nn.Conv2d(hidden_dim, oup, 1, 1, 0, bias=False),
@@ -153,12 +153,12 @@ class LastConvLayer(nn.Module):
             self.conv = nn.Sequential(
                 # pw
                 nn.Conv2d(inp, hidden_dim, 1, 1, 0, bias=False),
-                CenterNorm(hidden_dim, channels_first=True),
+                nn.BatchNorm2d(hidden_dim),
                 nn.SiLU(),
                 # dw
                 nn.Conv2d(hidden_dim, hidden_dim, 3, stride,
                           1, groups=hidden_dim, bias=False),
-                CenterNorm(hidden_dim, channels_first=True),
+                nn.BatchNorm2d(hidden_dim),
                 nn.SiLU(),
                 # pw-linear
                 nn.Conv2d(hidden_dim, oup, 1, 1, 0, bias=False),
