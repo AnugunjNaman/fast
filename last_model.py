@@ -120,14 +120,13 @@ class Transformer(nn.Module):
             self.layers.append(nn.ModuleList([
                 Attention(dim, heads, dim_head, dropout),
                 FeedForward(dim, mlp_dim, dropout),
-                ScaleLayer(),
-                ScaleLayer()
+                
             ]))
 
     def forward(self, x):
         for attn, ff, s1, s2 in self.layers:
-            x = s1(attn(x)) + x
-            x = s2(ff(x)) + x
+            x = attn(x) + x
+            x = ff(x) + x
         return x
 
 class LastConvLayer(nn.Module):
@@ -169,7 +168,7 @@ class LastConvLayer(nn.Module):
     def forward(self, x):
         out = self.conv(x)
         if self.use_res_connect:
-            out = self.alpha(out) + x
+            out = out + x
         return out
 
 class LastASTLayer(nn.Module):
