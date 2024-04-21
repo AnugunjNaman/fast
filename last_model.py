@@ -106,7 +106,7 @@ class Transformer(nn.Module):
             x = ff(x) + x
         return x
 
-class FastConvLayer(nn.Module):
+class LastConvLayer(nn.Module):
     def __init__(self, inp, oup, stride=1, expansion=4):
         super().__init__()
         self.stride = stride
@@ -148,7 +148,7 @@ class FastConvLayer(nn.Module):
             out = out + x
         return out
 
-class FastASTLayer(nn.Module):
+class LastASTLayer(nn.Module):
     def __init__(self, dim, depth, channel, kernel_size, patch_size, mlp_dim, dropout=0.):
         super().__init__()
         self.ph, self.pw = patch_size
@@ -180,7 +180,7 @@ class FastASTLayer(nn.Module):
         x = self.conv4(x)
         return x
 
-class FastAST(nn.Module):
+class LastAST(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -193,27 +193,27 @@ class FastAST(nn.Module):
         self.conv1 = conv_nxn_bn(1, init_dim, stride=2)
 
         self.stem = nn.ModuleList([])
-        self.stem.append(FastConvLayer(self.config.channels[0], self.config.channels[1], 1, self.config.expansion))
-        self.stem.append(FastConvLayer(self.config.channels[1], self.config.channels[2], 2, self.config.expansion))
-        self.stem.append(FastConvLayer(self.config.channels[2], self.config.channels[3], 1, self.config.expansion))
-        self.stem.append(FastConvLayer(self.config.channels[2], self.config.channels[3], 1, self.config.expansion))
+        self.stem.append(LastConvLayer(self.config.channels[0], self.config.channels[1], 1, self.config.expansion))
+        self.stem.append(LastConvLayer(self.config.channels[1], self.config.channels[2], 2, self.config.expansion))
+        self.stem.append(LastConvLayer(self.config.channels[2], self.config.channels[3], 1, self.config.expansion))
+        self.stem.append(LastConvLayer(self.config.channels[2], self.config.channels[3], 1, self.config.expansion))
 
         self.trunk = nn.ModuleList([])
         self.trunk.append(nn.ModuleList([
-            FastConvLayer(self.config.channels[3], self.config.channels[4], 2, self.config.expansion),
-            FastASTLayer(self.config.hidden_dims[0], self.config.depths[0], self.config.channels[5],
+            LastConvLayer(self.config.channels[3], self.config.channels[4], 2, self.config.expansion),
+            LastASTLayer(self.config.hidden_dims[0], self.config.depths[0], self.config.channels[5],
                            self.config.kernel_size, self.config.patch_size, int(self.config.hidden_dims[0] * 2))
         ]))
 
         self.trunk.append(nn.ModuleList([
-            FastConvLayer(self.config.channels[5], self.config.channels[6], 2, self.config.expansion),
-            FastASTLayer(self.config.hidden_dims[1], self.config.depths[1], self.config.channels[7],
+            LastConvLayer(self.config.channels[5], self.config.channels[6], 2, self.config.expansion),
+            LastASTLayer(self.config.hidden_dims[1], self.config.depths[1], self.config.channels[7],
                            self.config.kernel_size, self.config.patch_size, int(self.config.hidden_dims[1] * 4))
         ]))
 
         self.trunk.append(nn.ModuleList([
-            FastConvLayer(self.config.channels[7], self.config.channels[8], 2, self.config.expansion),
-            FastASTLayer(self.config.hidden_dims[2], self.config.depths[2], self.config.channels[9],
+            LastConvLayer(self.config.channels[7], self.config.channels[8], 2, self.config.expansion),
+            LastASTLayer(self.config.hidden_dims[2], self.config.depths[2], self.config.channels[9],
                            self.config.kernel_size, self.config.patch_size, int(self.config.hidden_dims[2] * 4))
         ]))
 
@@ -236,7 +236,7 @@ class FastAST(nn.Module):
 if __name__=="__main__":
     # torch.Size([16, 1, 128, 1876])
     config = LastConfig()
-    model = FastAST(config)
+    model = LastAST(config)
     x = torch.randn(2, 1, 128, 384*5+1)
     x = x[:, :, :, :-1]
     y = torch.randint(0, 1, (2, 1)).squeeze()
