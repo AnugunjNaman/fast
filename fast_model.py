@@ -3,7 +3,7 @@ import torch.nn as nn
 
 from einops import rearrange
 from einops.layers.torch import Reduce
-from config import LastConfig
+from config import FastConfig
 from thop import profile
 
 
@@ -216,7 +216,7 @@ class FastAST(nn.Module):
 
 if __name__=="__main__":
     # torch.Size([16, 1, 128, 1876])
-    config = LastConfig()
+    config = FastConfig()
     model = FastAST(config)
     x = torch.randn(2, 1, 128, 384*5+1)
     x = x[:, :, :, :-1]
