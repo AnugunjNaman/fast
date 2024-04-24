@@ -1,37 +1,44 @@
 import torch
 import numpy as np
 from tqdm import tqdm
-# from torch.autograd import grad
-
-# def perform_k_training_steps(params, fmodel, task, batch_size, inner_training_steps, alpha, device='cpu'):
-#     for epoch in range(inner_training_steps):
-#         x_batch, target, loss_fct = task.sample(batch_size)
-#         loss = loss_fct(fmodel(params, x_batch.to(device)), target.to(device))
-
-#         for p in params:  # Zero grad
-#             p.grad = None
-#         gradients = grad(loss, params)
-#         for p, g in zip(params, gradients):  # Grad step
-#             p.data -= alpha * g
-#     return params
+from torch.autograd import grad
 
 def perform_k_training_steps(params, fmodel, task, batch_size, inner_training_steps, alpha, device='cpu', verbose=False):
-    # NOTE: Assumes params coming in is DETACHED, i.e. they are leaves!
-    # Directly replacing the other function won't work because these cloned params aren't leaves, so .step() should fail
-    for param in params:
-        param.retain_grad()
-    optimizer = torch.optim.SGD(params, lr=alpha)   # Want to step traditionally
     for epoch in range(inner_training_steps):
-        optimizer.zero_grad()   # Wipe all params' gradients (in case my code messes up elsewhere)
         x_batch, target, loss_fct = task.sample(batch_size)
         loss = loss_fct(fmodel(params, x_batch.to(device)), target.to(device))
-        loss.backward()     # Due to retain_grad() on these clones, the original params get these grads too
+
+        for p in params:  # Zero grad
+            p.grad = None
+        gradients = grad(loss, params)
+        for p, g in zip(params, gradients):  # Grad step
+            p.data -= alpha * g
+        
         if verbose:
-            print(f"Epoch {epoch}, Loss: {loss.item()}")
-        optimizer.step()
+            print(f"Epoch {epoch+1}, Loss: {loss.item():.4f}")
+    
     if verbose:
         print("Finished training!")
-    optimizer.zero_grad()   # Wipe these clones' .grads (in case my code assumes this later)
+
+    return params
+
+# def perform_k_training_steps(params, fmodel, task, batch_size, inner_training_steps, alpha, device='cpu', verbose=False):
+#     # NOTE: Assumes params coming in is DETACHED, i.e. they are leaves!
+#     # Directly replacing the other function won't work because these cloned params aren't leaves, so .step() should fail
+#     for param in params:
+#         param.retain_grad()
+#     optimizer = torch.optim.SGD(params, lr=alpha)   # Want to step traditionally
+#     for epoch in range(inner_training_steps):
+#         optimizer.zero_grad()   # Wipe all params' gradients (in case my code messes up elsewhere)
+#         x_batch, target, loss_fct = task.sample(batch_size)
+#         loss = loss_fct(fmodel(params, x_batch.to(device)), target.to(device))
+#         loss.backward()     # Due to retain_grad() on these clones, the original params get these grads too
+#         if verbose:
+#             print(f"Epoch {epoch}, Loss: {loss.item()}")
+#         optimizer.step()
+#     if verbose:
+#         print("Finished training!")
+#     optimizer.zero_grad()   # Wipe these clones' .grads (in case my code assumes this later)
 
 def maml(params, fmodel, meta_optimizer, inner_training_steps, nb_epochs, batch_size_K, alpha, task_sampler, nb_tasks=10, device='cpu'):
     """

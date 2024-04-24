@@ -63,7 +63,11 @@ class MNISTTask:
         # Input size C for unbatched, (batch, C) for batched
         # Target size batch (yes, confusing!); each spot has a class INDEX [0, C) corresponding to whole row of size C
         loss_func = nn.CrossEntropyLoss()
-        return torch.concat([x_a, x_b]), torch.concat([y_a, y_b]), loss_func
+        # Finally, mix in the features and targets
+        features_ab = torch.concat([x_a, x_b])
+        targets_ab = torch.concat([y_a, y_b])
+        random_idx = torch.randperm(features_ab.shape[0])
+        return features_ab[random_idx], targets_ab[random_idx], loss_func
 
 def sample_mnisttask():
     a = np.random.randint(0, 10)    # Sample a, uniformly 0 through 9

@@ -86,12 +86,12 @@ mtask = sample_mnisttask()
 # 1) TODO accuracy evaluation
 # 2) ... still need to do accuracy evaluation
 new_params = [p.clone() for p in params]
-perform_k_training_steps(new_params, fmodel, mtask, 10, 1000, 1e-3, device=device, verbose=True)
+perform_k_training_steps(new_params, fmodel, mtask, 10, 50, 1e-3, device=device, verbose=True)
 # 3) ... still need to do accuracy evaluation
 scratch_mnist_model = MLP(784, 10, [300, 100], criterion_type='CrossEntropyLoss')
 scratch_mnist_model.to(device)
 scratch_fmodel, scratch_params = functorch.make_functional(scratch_mnist_model)
-perform_k_training_steps(scratch_params, scratch_fmodel, mtask, 10, 1000, 1e-3, device=device, verbose=True)
+perform_k_training_steps(scratch_params, scratch_fmodel, mtask, 10, 50, 1e-3, device=device, verbose=True)
 
 # 4) TODO
 # plt.title('MNIST MAML Test: N=2-Way, K=10-Shot')
