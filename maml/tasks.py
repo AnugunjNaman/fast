@@ -52,6 +52,13 @@ class MNISTTask:
         self.a_targets = mnist_y_train[a_idx]   # Tensor of all a
         self.b_features = mnist_x_train[b_idx]
         self.b_targets = mnist_y_train[b_idx]
+        self.ab_features = torch.concat([self.a_features, self.b_features])
+        self.ab_targets = torch.concat([self.a_targets, self.b_targets])
+        mnist_x_test, mnist_y_test = load_mnist_data(split='val')
+        # self.ab_features_test = torch.concat([mnist_x_test[mnist_y_test == a], mnist_x_test[mnist_y_test == b]])
+        self.ab_features_test = mnist_x_test[(mnist_y_test == a).logical_or(mnist_y_test == b)]
+        # self.ab_targets_test = torch.concat([mnist_y_test[mnist_y_test == a], mnist_y_test[mnist_y_test == b]])
+        self.ab_targets_test = mnist_y_test[(mnist_y_test == a).logical_or(mnist_y_test == b)]
     def sample(self, K):
         random_idx_a = torch.randperm(self.a_features.shape[0])[:K]
         x_a = self.a_features[random_idx_a]

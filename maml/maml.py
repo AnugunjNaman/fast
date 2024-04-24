@@ -1,9 +1,24 @@
-import torch
 import numpy as np
 from tqdm import tqdm
 from torch.autograd import grad
 
+def predict(fmodel, params, features):
+    predicted_logits = fmodel(params, features)
+    return predicted_logits.argmax(dim=1)   # Summarizes each row to index of biggest value
+
+def accuracy_on_mtask(fmodel, params, mtask, device):
+    predicted_ab_targets = predict(fmodel, params, mtask.ab_features.to(device))
+    acc_train = (predicted_ab_targets == mtask.ab_targets.to(device)).float().mean().item()
+    predicted_ab_targets_test = predict(fmodel, params, mtask.ab_features_test.to(device))
+    acc_test = (predicted_ab_targets_test == mtask.ab_targets_test.to(device)).float().mean().item()
+    return acc_train, acc_test
+
 def perform_k_training_steps(params, fmodel, task, batch_size, inner_training_steps, alpha, device='cpu', verbose=False):
+    # print("****perform start:")
+    # print(params[-1])
+    loss_list = []
+    acc_train_list = []
+    acc_test_list = []
     for epoch in range(inner_training_steps):
         x_batch, target, loss_fct = task.sample(batch_size)
         loss = loss_fct(fmodel(params, x_batch.to(device)), target.to(device))
@@ -15,12 +30,18 @@ def perform_k_training_steps(params, fmodel, task, batch_size, inner_training_st
             p.data -= alpha * g
         
         if verbose:
-            print(f"Epoch {epoch+1}, Loss: {loss.item():.4f}")
+            acc_train, acc_test = accuracy_on_mtask(fmodel, params, task, device)
+            print(f"Epoch {epoch+1}, Loss: {loss.item():.4f}; Accuracy (Training Set): {acc_train:.4f}, Accuracy (Test Set): {acc_test:.4f}")            
+            loss_list.append(loss.item())
+            acc_train_list.append(acc_train)
+            acc_test_list.append(acc_test)
     
     if verbose:
         print("Finished training!")
 
-    return params
+    # print("****perform end:")
+    # print(params[-1])
+    return loss_list, acc_train_list, acc_test_list
 
 # def perform_k_training_steps(params, fmodel, task, batch_size, inner_training_steps, alpha, device='cpu', verbose=False):
 #     # NOTE: Assumes params coming in is DETACHED, i.e. they are leaves!
