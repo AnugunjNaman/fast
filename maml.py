@@ -80,6 +80,49 @@ class Task:
         return x, y, loss_fct
 
 
+from torchvision import datasets, transforms
+def load_mnist_data(data_path='./data', split='train', n_training_examples=-1):
+  assert (split in ['train', 'val'])
+  if split == 'train':
+    train_data = datasets.MNIST(
+        data_path, train=True, download=True, transform=transforms.ToTensor())
+    if n_training_examples == -1:
+      features, targets = train_data.data, train_data.targets
+    else:
+      features, targets = train_data.data[:n_training_examples], train_data.targets[:n_training_examples]
+  # MNIST does not have a validation set... so we use the test set.
+  if split in ['val']:
+    test_data = datasets.MNIST(
+        data_path, train=False, download=True, transform=transforms.ToTensor())
+    features, targets = test_data.data, test_data.targets
+  return features.reshape(targets.shape[0], -1).float(), targets
+# mnist_x_train, mnist_y_train = load_mnist_data()
+# mnist_x_test, mnist_y_test = load_mnist_data(split='val')
+class MNISTTask:
+    def __init__(self, a, b):
+        # The task will be to identify whether the number is 1
+        mnist_x_train, mnist_y_train = load_mnist_data()
+        a_idx = (mnist_y_train == a).logical_or(mnist_y_train == b)
+        self.a_or_b_features = mnist_x_train[a_idx]
+        self.a_or_b_targets = mnist_y_train[a_idx]
+    def sample(self, K):
+        get_idxs = torch.randperm(self.a_or_b_features.shape[0])[:K]
+        x = self.a_or_b_features[get_idxs]
+        y = self.a_or_b_targets[get_idxs]
+        # x = torch.rand((K, 1)) * 10 - 5  # Sample x in [-5, 5]; ooooh this is for choosing x values of observation points; so like a batch of 10 observations at 10 different x of what the sin y is corresponding to the a and b of this task
+        # y = self.a * torch.sin(x + self.b)  # So the hidden information to learn is still a and b, i.e. the amplitude and phase
+        loss_fct = nn.MSELoss()
+        return x, y, loss_fct
+
+
+def create_task_MNIST():
+    a = np.random.randint(0, 10)    # Sample the first possibility
+    if a == 9:
+        b = 0
+    else:
+        b = a + 1
+    return MNISTTask(a, b)
+
 # @torch.no_grad()
 def create_task():
     a = torch.rand(1).item() * 4.9 + .1  # Sample the amplitude in [0.1, 5.0]
@@ -91,6 +134,12 @@ def clone_params(params_list):
     # Get copy of the parameters that can be worked independently but which still treat the OG parameters as leaves
     return [param.clone() for param in params_list]
 
+def clone_params_retain_grad(params_list):
+    # Get copy of the parameters that can be worked independently but which still treat the OG parameters as leaves BUT ALSO can be used with .backward()
+    cloned_params_list = [param.clone() for param in params_list]
+    for cloned_param in cloned_params_list:
+        cloned_param.retain_grad()
+    return cloned_params_list
 
 def clone_detach_regrad_params(params_list):
     # Get "deep" copy of the parameters that is completely independent, yet still tracks gradients
@@ -202,6 +251,7 @@ if __name__ == "__main__":
               torch.zeros(1, device=MY_DEVICE).requires_grad_()]
     # Replace with
     # THETAS = list(model.parameters())
+    mnist_model = MLP(784, 10, [300, 100])
     ############################################################################
 
     # Run experiment!
