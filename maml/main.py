@@ -1,11 +1,18 @@
+import os
+import sys
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))  # See parent dir modules
+
 from models import MLP, mlp
 import torch
-from utils import set_random_seeds, clone_detach_params
+from utils import set_random_seeds, clone_detach_params, replace_model_params
 import matplotlib.pyplot as plt
 from maml import perform_k_training_steps, maml, accuracy_on_mtask
-from tasks import sample_task, sample_mnisttask
+from tasks import sample_task, sample_mnisttask, sample_adimatask
 import numpy as np
 import functorch
+from config import LastConfig, LastConfigSmaller
+from last_model import LastAST
+from train_last import save_model_weights, train_epoch, test_model
 
 def main_regression():
     set_random_seeds(42)
@@ -51,6 +58,104 @@ def main_regression():
 
 ################################################################################
 
+def main_mnist():
+    set_random_seeds(42)
+    if torch.cuda.is_available():
+        print("CUDA found!")
+        device = torch.device('cuda')
+    else:
+        print("Warning: using CPU...")
+        device = torch.device('cpu')
+
+    mnist_model = MLP(784, 10, [300, 100], criterion_type='CrossEntropyLoss')
+    mnist_model.to(device)
+    fmodel, params = functorch.make_functional(mnist_model)
+    og_params = clone_detach_params(params)     # LMAO these achieve 4%
+    print(og_params[-1])
+    set_random_seeds(42)
+
+    meta_optimizer = torch.optim.Adam(params, lr=1e-3)
+    N_EPOCHS = 100
+    training_loss = maml(params, fmodel, meta_optimizer, 1, N_EPOCHS, 10, 1e-3, sample_mnisttask, device=device, nb_tasks=10)
+    print(f"Finished MAML training {N_EPOCHS}!")
+    plt.title('MNIST MAML Test: N=2-Way, K=10-Shot')
+    plt.plot(training_loss, c='lightgreen', linestyle='--', linewidth=2.2, label=f'MAML Training Loss ({N_EPOCHS} epochs)')
+    plt.legend()
+    plt.savefig(f'mnist_trainingloss_epochs{N_EPOCHS}_seed42.png')
+    plt.show()
+
+    # TODO: How to show MAML-ready state?
+    # 0) Choose a task.
+    # 1) Try pre-update on the chosen task - percent accuracy.
+    # 2) Then first contrast is params trained on the chosen task - percent accuracy as we train more epochs.
+    # 3) Then second contrast is params trained from scratch on chosen task - percent accuracy as we train epochs.
+    #   - Hopefully this takes way more epochs to reach the accuracy.
+    # 4) Plot the 3 sets of accuracies - 1) flat line, 2) rise, 3) rise from nothing
+
+    # 0) New task
+    mtask = sample_mnisttask()
+    # 1) Pre-update MAML-ready model accuracy evaluation
+    maml_params = clone_detach_params(params)   # LMAO these somehow achieve 0%, like literally 0
+    print(maml_params[-1])
+    pre_acc_train, pre_acc_test = accuracy_on_mtask(fmodel, params, mtask, device)
+    print(f"\nMAML-Ready Model: Accuracy (Training Set): {pre_acc_train}, Accuracy (Test Set): {pre_acc_test}\n")
+    features = mtask.ab_features.to(device)
+    predicted_logits = fmodel(params, features)
+    predicted_ab_targets = predicted_logits.argmax(dim=1)   # Summarizes each row to index of biggest value
+    acc_train = (predicted_ab_targets == mtask.ab_targets.to(device)).float().mean().item()
+    print(features)
+    print(predicted_logits)
+    print(predicted_ab_targets)
+    print(predicted_ab_targets.unique())    # LMAO only predicts 7 - the last thing it optimized for was 7 apparently
+    print(mtask.ab_targets)
+    print(mtask.ab_targets.unique())    # Only 0 and 1, etc.; I messed up framing these tasks
+    print(acc_train)    # Hence 0% accuracy
+    pre_acc_train, pre_acc_test = accuracy_on_mtask(fmodel, og_params, mtask, device)
+    print(f"\nMAML-Ready Model: Accuracy (Training Set): {pre_acc_train}, Accuracy (Test Set): {pre_acc_test}\n")
+    features = mtask.ab_features.to(device)
+    predicted_logits = fmodel(og_params, features)
+    predicted_ab_targets = predicted_logits.argmax(dim=1)   # Summarizes each row to index of biggest value
+    acc_train = (predicted_ab_targets == mtask.ab_targets.to(device)).float().mean().item()
+    print(features)
+    print(predicted_logits)
+    print(predicted_ab_targets)
+    print(predicted_ab_targets.unique())
+    print(mtask.ab_targets)
+    print(mtask.ab_targets.unique())
+    print(acc_train)
+    pre_acc_train, pre_acc_test = accuracy_on_mtask(fmodel, maml_params, mtask, device)
+    print(f"\nMAML-Ready Model: Accuracy (Training Set): {pre_acc_train}, Accuracy (Test Set): {pre_acc_test}\n")
+    # 2) MAML-ready params trained on chosen task
+    new_params = [p.clone() for p in params]
+    loss_list, acc_train_list, acc_test_list = \
+        perform_k_training_steps(new_params, fmodel, mtask, 10, 50, 1e-3, device=device, verbose=True)
+    print(new_params[-1])
+    # 3) Scratch params trained on chosen task
+    scratch_mnist_model = MLP(784, 10, [300, 100], criterion_type='CrossEntropyLoss')
+    scratch_mnist_model.to(device)
+    scratch_fmodel, scratch_params = functorch.make_functional(scratch_mnist_model)
+    scratch_loss_list, scratch_acc_train_list, scratch_acc_test_list = \
+        perform_k_training_steps(scratch_params, scratch_fmodel, mtask, 10, 50, 1e-3, device=device, verbose=True)
+
+    # 4) Plot
+    plt.title('MNIST MAML Test: N=2-Way, K=10-Shot')
+    # 1)
+    plt.hlines(pre_acc_train, 0, 50, colors='lightgreen', linestyle='--', linewidth=2.2, label='pre-update train acc')
+    plt.hlines(pre_acc_test, 0, 50, colors='green', linestyle='--', linewidth=2.2, label='pre-update test acc')
+    # 2)
+    plt.plot(acc_train_list, c='cyan', linestyle='-', linewidth=2.2, label='MAML train 50 acc')
+    plt.plot(acc_test_list, c='blue', linestyle='-', linewidth=2.2, label='MAML test 50 acc')
+    # 3)
+    plt.plot(scratch_acc_train_list, c='pink', linestyle='-', linewidth=2.2, label='Scratch train 50 acc')
+    plt.plot(scratch_acc_test_list, c='red', linestyle='-', linewidth=2.2, label='Scratch test 50 acc')
+    plt.legend()
+    # plt.xlim(-5, 5)
+    # plt.ylim(-5, 5)
+    plt.savefig('mnist_accuracy_seed42.png')
+    plt.show()
+
+################################################################################
+
 set_random_seeds(42)
 if torch.cuda.is_available():
     print("CUDA found!")
@@ -59,89 +164,126 @@ else:
     print("Warning: using CPU...")
     device = torch.device('cpu')
 
-mnist_model = MLP(784, 10, [300, 100], criterion_type='CrossEntropyLoss')
-mnist_model.to(device)
-fmodel, params = functorch.make_functional(mnist_model)
-og_params = clone_detach_params(params)     # LMAO these achieve 4%
-print(og_params[-1])
+# Load LAST
+config = LastConfigSmaller()
+print("Configs of Model: ")
+print(config)
+
+last_model = LastAST(config=config)
+last_model.to(device)
+print(last_model)
+
+# mnist_model = MLP(784, 10, [300, 100], criterion_type='CrossEntropyLoss')
+# mnist_model.to(device)
+fmodel, params = functorch.make_functional(last_model)
+# og_params = clone_detach_params(params)     # LMAO these achieve 4%
+print(params[-1])
 set_random_seeds(42)
 
 meta_optimizer = torch.optim.Adam(params, lr=1e-3)
-N_EPOCHS = 100
-training_loss = maml(params, fmodel, meta_optimizer, 1, N_EPOCHS, 10, 1e-3, sample_mnisttask, device=device, nb_tasks=10)
+N_EPOCHS = 10
+training_loss = maml(params, fmodel, meta_optimizer, 1, N_EPOCHS, 1, 1e-3, sample_adimatask, device=device, nb_tasks=1)
+# Save weights!
+replace_model_params(last_model, params)    # Stick them back in...
+save_model_weights(last_model, 'META', 3)
+# Save figure
 print(f"Finished MAML training {N_EPOCHS}!")
-plt.title('MNIST MAML Test: N=2-Way, K=10-Shot')
+plt.title('ADIMA MAML Test: N=2-Way, K=10-Shot')
 plt.plot(training_loss, c='lightgreen', linestyle='--', linewidth=2.2, label=f'MAML Training Loss ({N_EPOCHS} epochs)')
 plt.legend()
-plt.savefig(f'mnist_trainingloss_epochs{N_EPOCHS}_seed42.png')
+plt.savefig(f'adima_trainingloss_epochs{N_EPOCHS}_seed42.png')
 plt.show()
 
-# TODO: How to show MAML-ready state?
-# 0) Choose a task.
-# 1) Try pre-update on the chosen task - percent accuracy.
-# 2) Then first contrast is params trained on the chosen task - percent accuracy as we train more epochs.
-# 3) Then second contrast is params trained from scratch on chosen task - percent accuracy as we train epochs.
-#   - Hopefully this takes way more epochs to reach the accuracy.
-# 4) Plot the 3 sets of accuracies - 1) flat line, 2) rise, 3) rise from nothing
+# # TODO: How to show MAML-ready state?
+# # 0) Choose a task.
+# # 1) Try pre-update on the chosen task - percent accuracy.
+# # 2) Then first contrast is params trained on the chosen task - percent accuracy as we train more epochs.
+# # 3) Then second contrast is params trained from scratch on chosen task - percent accuracy as we train epochs.
+# #   - Hopefully this takes way more epochs to reach the accuracy.
+# # 4) Plot the 3 sets of accuracies - 1) flat line, 2) rise, 3) rise from nothing
 
-# 0) New task
-mtask = sample_mnisttask()
-# 1) Pre-update MAML-ready model accuracy evaluation
-maml_params = clone_detach_params(params)   # LMAO these somehow achieve 0%, like literally 0
-print(maml_params[-1])
-pre_acc_train, pre_acc_test = accuracy_on_mtask(fmodel, params, mtask, device)
-print(f"\nMAML-Ready Model: Accuracy (Training Set): {pre_acc_train}, Accuracy (Test Set): {pre_acc_test}\n")
-features = mtask.ab_features.to(device)
-predicted_logits = fmodel(params, features)
-predicted_ab_targets = predicted_logits.argmax(dim=1)   # Summarizes each row to index of biggest value
-acc_train = (predicted_ab_targets == mtask.ab_targets.to(device)).float().mean().item()
-print(features)
-print(predicted_logits)
-print(predicted_ab_targets)
-print(predicted_ab_targets.unique())    # LMAO only predicts 7 - the last thing it optimized for was 7 apparently
-print(mtask.ab_targets)
-print(mtask.ab_targets.unique())    # Only 0 and 1, etc.; I messed up framing these tasks
-print(acc_train)    # Hence 0% accuracy
-pre_acc_train, pre_acc_test = accuracy_on_mtask(fmodel, og_params, mtask, device)
-print(f"\nMAML-Ready Model: Accuracy (Training Set): {pre_acc_train}, Accuracy (Test Set): {pre_acc_test}\n")
-features = mtask.ab_features.to(device)
-predicted_logits = fmodel(og_params, features)
-predicted_ab_targets = predicted_logits.argmax(dim=1)   # Summarizes each row to index of biggest value
-acc_train = (predicted_ab_targets == mtask.ab_targets.to(device)).float().mean().item()
-print(features)
-print(predicted_logits)
-print(predicted_ab_targets)
-print(predicted_ab_targets.unique())
-print(mtask.ab_targets)
-print(mtask.ab_targets.unique())
-print(acc_train)
-pre_acc_train, pre_acc_test = accuracy_on_mtask(fmodel, maml_params, mtask, device)
-print(f"\nMAML-Ready Model: Accuracy (Training Set): {pre_acc_train}, Accuracy (Test Set): {pre_acc_test}\n")
-# 2) MAML-ready params trained on chosen task
-new_params = [p.clone() for p in params]
-loss_list, acc_train_list, acc_test_list = \
-    perform_k_training_steps(new_params, fmodel, mtask, 10, 50, 1e-3, device=device, verbose=True)
-print(new_params[-1])
-# 3) Scratch params trained on chosen task
-scratch_mnist_model = MLP(784, 10, [300, 100], criterion_type='CrossEntropyLoss')
-scratch_mnist_model.to(device)
-scratch_fmodel, scratch_params = functorch.make_functional(scratch_mnist_model)
-scratch_loss_list, scratch_acc_train_list, scratch_acc_test_list = \
-    perform_k_training_steps(scratch_params, scratch_fmodel, mtask, 10, 50, 1e-3, device=device, verbose=True)
+# # 0) New task
+# atask = sample_adimatask()
+# # 1) Pre-update MAML-ready model accuracy evaluation
+# # maml_params = clone_detach_params(params)   # LMAO these somehow achieve 0%, like literally 0
+# print(params[-1])
 
-# 4) Plot
-plt.title('MNIST MAML Test: N=2-Way, K=10-Shot')
-# 1)
-plt.hlines(pre_acc_train, 0, 50, colors='lightgreen', linestyle='--', linewidth=2.2, label='pre-update train acc')
-plt.hlines(pre_acc_test, 0, 50, colors='green', linestyle='--', linewidth=2.2, label='pre-update test acc')
-# 2)
-plt.plot(acc_train_list, c='cyan', linestyle='-', linewidth=2.2, label='MAML train 50 acc')
-plt.plot(acc_test_list, c='blue', linestyle='-', linewidth=2.2, label='MAML test 50 acc')
-# 3)
-plt.plot(scratch_acc_train_list, c='pink', linestyle='-', linewidth=2.2, label='Scratch train 50 acc')
-plt.plot(scratch_acc_test_list, c='red', linestyle='-', linewidth=2.2, label='Scratch test 50 acc')
-plt.legend()
-# plt.xlim(-5, 5)
-# plt.ylim(-5, 5)
-plt.savefig('mnist_accuracy_seed42.png')
-plt.show()
+# language = 'Hindi'
+# test_dataset = AudioDataset(f"../data/files/SC_audio_{language}/", 
+#                             f"../data/annotations/{language}_test.csv", hop_size=500)
+# train_dataset = AudioDataset(f"../data/files/SC_audio_{language}/", 
+#                              f"../data/annotations/{language}_train.csv", hop_size=500)
+# test_dataloader = DataLoader(test_dataset, batch_size=10, shuffle=True, num_workers=1, pin_memory=True)
+# train_dataloader = DataLoader(train_dataset, batch_size=10, shuffle=True, num_workers=1, pin_memory=True)
+#         K_features, K_targets = next(iter(dataloader))
+# test_model(last_model, dataloader, criterion)
+
+# for epoch in range(args.num_epochs):
+#         train_loss = train_epoch(model, train_dataloader, optimizer, criterion)
+#         test_accuracy, test_loss, test_f1 = test_model(model, test_dataloader, criterion)
+#         train_accuracy, train_loss, train_f1 = test_model(model, train_dataloader, criterion)
+#         if test_accuracy > acc:
+#             acc = test_accuracy
+#             save_model_weights(model, args.language, ff=1)
+        
+#         train_losses.append(train_loss)
+#         test_losses.append(test_loss)
+#         print(f'Epoch {epoch+1}/{args.num_epochs} Train Loss: {train_loss:.4f}, Train Accuracy: {train_accuracy:.4f}, Train F1: {train_f1:.4f}')
+#         print(f'Epoch {epoch+1}/{args.num_epochs} Test Loss: {test_loss:.4f}, Test Accuracy: {test_accuracy:.4f}, Test F1: {test_f1:.4f}')
+
+# pre_acc_train, pre_acc_test = accuracy_on_mtask(fmodel, params, atask, device)
+# print(f"\nMAML-Ready Model: Accuracy (Training Set): {pre_acc_train}, Accuracy (Test Set): {pre_acc_test}\n")
+# features = mtask.ab_features.to(device)
+# predicted_logits = fmodel(params, features)
+# predicted_ab_targets = predicted_logits.argmax(dim=1)   # Summarizes each row to index of biggest value
+# acc_train = (predicted_ab_targets == mtask.ab_targets.to(device)).float().mean().item()
+# print(features)
+# print(predicted_logits)
+# print(predicted_ab_targets)
+# print(predicted_ab_targets.unique())    # LMAO only predicts 7 - the last thing it optimized for was 7 apparently
+# print(mtask.ab_targets)
+# print(mtask.ab_targets.unique())    # Only 0 and 1, etc.; I messed up framing these tasks
+# print(acc_train)    # Hence 0% accuracy
+# pre_acc_train, pre_acc_test = accuracy_on_mtask(fmodel, og_params, mtask, device)
+# print(f"\nMAML-Ready Model: Accuracy (Training Set): {pre_acc_train}, Accuracy (Test Set): {pre_acc_test}\n")
+# features = mtask.ab_features.to(device)
+# predicted_logits = fmodel(og_params, features)
+# predicted_ab_targets = predicted_logits.argmax(dim=1)   # Summarizes each row to index of biggest value
+# acc_train = (predicted_ab_targets == mtask.ab_targets.to(device)).float().mean().item()
+# print(features)
+# print(predicted_logits)
+# print(predicted_ab_targets)
+# print(predicted_ab_targets.unique())
+# print(mtask.ab_targets)
+# print(mtask.ab_targets.unique())
+# print(acc_train)
+# pre_acc_train, pre_acc_test = accuracy_on_mtask(fmodel, maml_params, mtask, device)
+# print(f"\nMAML-Ready Model: Accuracy (Training Set): {pre_acc_train}, Accuracy (Test Set): {pre_acc_test}\n")
+# # 2) MAML-ready params trained on chosen task
+# new_params = [p.clone() for p in params]
+# loss_list, acc_train_list, acc_test_list = \
+#     perform_k_training_steps(new_params, fmodel, mtask, 10, 50, 1e-3, device=device, verbose=True)
+# print(new_params[-1])
+# # 3) Scratch params trained on chosen task
+# scratch_mnist_model = MLP(784, 10, [300, 100], criterion_type='CrossEntropyLoss')
+# scratch_mnist_model.to(device)
+# scratch_fmodel, scratch_params = functorch.make_functional(scratch_mnist_model)
+# scratch_loss_list, scratch_acc_train_list, scratch_acc_test_list = \
+#     perform_k_training_steps(scratch_params, scratch_fmodel, mtask, 10, 50, 1e-3, device=device, verbose=True)
+
+# # 4) Plot
+# plt.title('MNIST MAML Test: N=2-Way, K=10-Shot')
+# # 1)
+# plt.hlines(pre_acc_train, 0, 50, colors='lightgreen', linestyle='--', linewidth=2.2, label='pre-update train acc')
+# plt.hlines(pre_acc_test, 0, 50, colors='green', linestyle='--', linewidth=2.2, label='pre-update test acc')
+# # 2)
+# plt.plot(acc_train_list, c='cyan', linestyle='-', linewidth=2.2, label='MAML train 50 acc')
+# plt.plot(acc_test_list, c='blue', linestyle='-', linewidth=2.2, label='MAML test 50 acc')
+# # 3)
+# plt.plot(scratch_acc_train_list, c='pink', linestyle='-', linewidth=2.2, label='Scratch train 50 acc')
+# plt.plot(scratch_acc_test_list, c='red', linestyle='-', linewidth=2.2, label='Scratch test 50 acc')
+# plt.legend()
+# # plt.xlim(-5, 5)
+# # plt.ylim(-5, 5)
+# plt.savefig('mnist_accuracy_seed42.png')
+# plt.show()

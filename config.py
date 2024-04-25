@@ -31,6 +31,16 @@ class LastConfig:
     patch_size: Tuple[int, int] = (2, 2)
     depths: Tuple[int, int, int] = (2, 4, 4)
 
+@dataclass
+class LastConfigSmaller:
+    image_size: Tuple[int, int] = (128, 1876)
+    hidden_dims: Tuple[int, int, int] = (48, 64, 72)
+    channels: Tuple[int, int, int, int, int, int, int, int, int, int, int] = (16, 32, 48, 48, 64, 64, 80, 80, 96, 96, 384)
+    num_classes: int = 2
+    expansion: int = 4
+    kernel_size: int = 3
+    patch_size: Tuple[int, int] = (2, 2)
+    depths: Tuple[int, int, int] = (1, 2, 2)
 
 @dataclass
 class FastConfig:

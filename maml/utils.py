@@ -42,6 +42,12 @@ def clone_model(model):
     cloned = copy.deepcopy(model)
     return cloned
 
+def replace_model_params(model, new_params):
+    state_dict = model.state_dict()
+    for key, new_value in zip(state_dict.keys(), new_params):
+        state_dict[key] = new_value     # Overwrite old param
+    model.load_state_dict(state_dict)
+
 def save_training_curve(train_loss, train_acc, test_acc, 
                         model_name, model_shape, optim_name, 
                         lr, wd, n_epochs):

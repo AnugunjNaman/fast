@@ -1,7 +1,13 @@
+import os
+import sys
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))  # See parent dir modules
+
 import torch
 import torch.nn as nn
 import numpy as np
 from torchvision import datasets, transforms
+from loader import AudioDataset
+from torch.utils.data import DataLoader
 
 class Task:
     def __init__(self, a, b):
@@ -83,3 +89,35 @@ def sample_mnisttask():
     else:
         b = a + 1   # Select b as "next" number for simplicity; just 10 different tasks
     return MNISTTask(a, b)
+
+################################################################################
+
+# Need some way to randomly sample K feature-target pairs for each class from either training or test
+class ADIMATask:
+    def __init__(self, language) -> None:
+        self.language = language
+        self.test_dataset = AudioDataset(f"../data/files/SC_audio_{language}/", 
+                                         f"../data/annotations/{language}_test.csv", hop_size=500)
+        self.train_dataset = AudioDataset(f"../data/files/SC_audio_{language}/", 
+                                          f"../data/annotations/{language}_train.csv", hop_size=500)
+    def sample(self, K, test_set=False):
+        if test_set:
+            dataloader = DataLoader(self.test_dataset, batch_size=2*K, shuffle=True, num_workers=1, pin_memory=True)
+        else:
+            dataloader = DataLoader(self.train_dataset, batch_size=2*K, shuffle=True, num_workers=1, pin_memory=True)
+        K_features, K_targets = next(iter(dataloader))
+        # TODO: Ensure there's K of each class; right now I'm shortcutting to just 2K - they may be imbalanced
+        return K_features, K_targets, nn.CrossEntropyLoss()
+
+# Return either Hindi, Bengali, or Punjabi task
+def sample_adimatask():
+    lang_selector = np.random.randint(0, 3)
+    if lang_selector == 0:
+        language = 'Hindi'
+    elif lang_selector == 1:
+        language = 'Bengali'
+    elif lang_selector == 2:
+        language = 'Punjabi'
+    else:
+        raise ValueError("lang_selector shouldn't be anything else")
+    return ADIMATask(language)

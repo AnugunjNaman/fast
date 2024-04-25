@@ -3,6 +3,7 @@ from tqdm import tqdm
 from torch.autograd import grad
 
 def predict(fmodel, params, features):
+    features = features.float()[:, :, :, :-1]
     predicted_logits = fmodel(params, features)
     return predicted_logits.argmax(dim=1)   # Summarizes each row to index of biggest value
 
@@ -21,6 +22,7 @@ def perform_k_training_steps(params, fmodel, task, batch_size, inner_training_st
     acc_test_list = []
     for epoch in range(inner_training_steps):
         x_batch, target, loss_fct = task.sample(batch_size)
+        x_batch = x_batch.float()[:, :, :, :-1]
         loss = loss_fct(fmodel(params, x_batch.to(device)), target.to(device))
 
         for p in params:  # Zero grad
@@ -90,6 +92,7 @@ def maml(params, fmodel, meta_optimizer, inner_training_steps, nb_epochs, batch_
             x, y, loss_fct = D_i_prime[i]
             f_theta_prime = theta_i_prime[i]
             # Compute \nabla_theta L(f_theta_i_prime) for task ti
+            x = x.float()[:, :, :, :-1]
             loss = loss_fct(fmodel(f_theta_prime, x.to(device)), y.to(device))
             # loss.backward()
             losses.append(loss)
