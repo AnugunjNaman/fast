@@ -1,5 +1,6 @@
 # Custom
 maml/data/
+obsolete/
 ffmpeg/
 *.pth
 *.npy

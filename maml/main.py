@@ -12,7 +12,9 @@ import numpy as np
 import functorch
 from config import LastConfig, LastConfigSmaller
 from last_model import LastAST
-from train_last import save_model_weights, train_epoch, test_model
+from train_last import save_model_weights, train_epoch, test_model, load_weights
+from torch.utils.data import DataLoader
+from loader import AudioDataset
 
 def main_regression():
     set_random_seeds(42)
@@ -157,6 +159,7 @@ def main_mnist():
 ################################################################################
 
 set_random_seeds(42)
+print("Device count:", torch.cuda.device_count())
 if torch.cuda.is_available():
     print("CUDA found!")
     device = torch.device('cuda')
@@ -165,9 +168,9 @@ else:
     device = torch.device('cpu')
 
 # Load LAST
-config = LastConfigSmaller()
-print("Configs of Model: ")
-print(config)
+config = LastConfig()
+# print("Configs of Model: ")
+# print(config)
 
 last_model = LastAST(config=config)
 last_model.to(device)
@@ -180,43 +183,83 @@ fmodel, params = functorch.make_functional(last_model)
 print(params[-1])
 set_random_seeds(42)
 
-meta_optimizer = torch.optim.Adam(params, lr=1e-3)
-N_EPOCHS = 10
-training_loss = maml(params, fmodel, meta_optimizer, 1, N_EPOCHS, 1, 1e-3, sample_adimatask, device=device, nb_tasks=1)
+meta_optimizer = torch.optim.Adam(params, lr=1e-4)
+N_EPOCHS = 500
+training_loss = maml(params, fmodel, meta_optimizer, 1, N_EPOCHS, 4, 1e-4, sample_adimatask, device=device, nb_tasks=4)     # NOTE: for size, nb_tasks matters!
 # Save weights!
 replace_model_params(last_model, params)    # Stick them back in...
-save_model_weights(last_model, 'META', 3)
+save_model_weights(last_model, 'META_500_1en4_BEEG144', 3)
 # Save figure
 print(f"Finished MAML training {N_EPOCHS}!")
-plt.title('ADIMA MAML Test: N=2-Way, K=10-Shot')
+plt.title('ADIMA MAML Test: N=2-Way, K=4-Shot Training')
 plt.plot(training_loss, c='lightgreen', linestyle='--', linewidth=2.2, label=f'MAML Training Loss ({N_EPOCHS} epochs)')
 plt.legend()
-plt.savefig(f'adima_trainingloss_epochs{N_EPOCHS}_seed42.png')
+plt.savefig(f'adima_trainingloss_epochs{N_EPOCHS}_seed42_500_1en4_BEEG144.png')
 plt.show()
 
-# # TODO: How to show MAML-ready state?
-# # 0) Choose a task.
-# # 1) Try pre-update on the chosen task - percent accuracy.
-# # 2) Then first contrast is params trained on the chosen task - percent accuracy as we train more epochs.
-# # 3) Then second contrast is params trained from scratch on chosen task - percent accuracy as we train epochs.
-# #   - Hopefully this takes way more epochs to reach the accuracy.
-# # 4) Plot the 3 sets of accuracies - 1) flat line, 2) rise, 3) rise from nothing
+# TODO: How to show MAML-ready state?
+# 0) Choose a task.
+# 1) Try pre-update on the chosen task - percent accuracy.
+# 2) Then first contrast is params trained on the chosen task - percent accuracy as we train more epochs.
+# 3) Then second contrast is params trained from scratch on chosen task - percent accuracy as we train epochs.
+#   - Hopefully this takes way more epochs to reach the accuracy.
+# 4) Plot the 3 sets of accuracies - 1) flat line, 2) rise, 3) rise from nothing
+
+# del last_model
+# checkpoint = torch.load(f'saves/last/META_biggest_3_ast_weights_epoch.pth', map_location=device)
+# config = LastConfig()
+# last_model = LastAST(config=config)
+# last_model.load_state_dict(checkpoint)
+# last_model.to(device)
 
 # # 0) New task
-# atask = sample_adimatask()
+# # atask = sample_adimatask()
 # # 1) Pre-update MAML-ready model accuracy evaluation
 # # maml_params = clone_detach_params(params)   # LMAO these somehow achieve 0%, like literally 0
-# print(params[-1])
-
-# language = 'Hindi'
+# # print(params[-1])
+# language = 'Punjabi'
 # test_dataset = AudioDataset(f"../data/files/SC_audio_{language}/", 
 #                             f"../data/annotations/{language}_test.csv", hop_size=500)
-# train_dataset = AudioDataset(f"../data/files/SC_audio_{language}/", 
-#                              f"../data/annotations/{language}_train.csv", hop_size=500)
-# test_dataloader = DataLoader(test_dataset, batch_size=10, shuffle=True, num_workers=1, pin_memory=True)
-# train_dataloader = DataLoader(train_dataset, batch_size=10, shuffle=True, num_workers=1, pin_memory=True)
-#         K_features, K_targets = next(iter(dataloader))
-# test_model(last_model, dataloader, criterion)
+# # train_dataset = AudioDataset(f"../data/files/SC_audio_{language}/", 
+# #                              f"../data/annotations/{language}_train.csv", hop_size=500)
+# test_dataloader = DataLoader(test_dataset, batch_size=2, shuffle=True, num_workers=1, pin_memory=True)
+# # train_dataloader = DataLoader(train_dataset, batch_size=2, shuffle=True, num_workers=1, pin_memory=True)
+# # K_features, K_targets = next(iter(dataloader))
+# # test_model(last_model, dataloader, criterion)
+# criterion = torch.nn.CrossEntropyLoss()
+
+# from sklearn.metrics import f1_score
+# from tqdm import tqdm
+# def test_model(model, dataloader, criterion, device):
+#     model.eval()
+#     correct_predictions = 0
+#     total_samples = 0
+#     total_loss = 0.0
+#     all_preds, all_targets = [], []
+    
+#     with torch.no_grad():
+#         for inputs, targets in tqdm(dataloader):
+#             inputs, targets = inputs.to(device), targets.to(device)
+#             outputs = model(inputs.float()[:, :, :, :-1])
+#             loss = criterion(outputs.view(-1, 2), targets.view(-1))
+#             total_loss += loss.item()
+
+#             _, predicted = torch.max(outputs, 1)
+#             correct_predictions += (predicted == targets).sum().item()
+#             total_samples += targets.size(0)
+
+#             all_preds.extend(predicted.cpu().numpy())
+#             all_targets.extend(targets.cpu().numpy())
+    
+#     accuracy = correct_predictions / total_samples
+#     average_loss = total_loss / len(dataloader)
+#     f1 = f1_score(all_targets, all_preds)
+#     return accuracy, average_loss, f1
+
+# test_accuracy, test_loss, test_f1 = test_model(last_model, test_dataloader, criterion, device)
+# print(f"Test Accuracy: {test_accuracy}")
+# print(f"Test Loss: {test_loss}")
+# print(f"Test F1: {test_f1}")
 
 # for epoch in range(args.num_epochs):
 #         train_loss = train_epoch(model, train_dataloader, optimizer, criterion)

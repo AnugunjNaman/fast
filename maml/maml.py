@@ -81,7 +81,7 @@ def maml(params, fmodel, meta_optimizer, inner_training_steps, nb_epochs, batch_
                                      inner_training_steps, alpha, device=device)
             theta_i_prime.append(cloned_params)
             # Sample data points Di' for the meta-update (line 8 in the pseudocode)
-            x, y, loss_fct = task.sample(25)
+            x, y, loss_fct = task.sample(batch_size_K)  # NOTE: This technically doesn't need to be the same as K...
             D_i_prime.append((x, y, loss_fct))
 
         # Meta update
