@@ -63,7 +63,7 @@ def perform_k_training_steps(params, fmodel, task, batch_size, inner_training_st
 #         print("Finished training!")
 #     optimizer.zero_grad()   # Wipe these clones' .grads (in case my code assumes this later)
 
-def maml(params, fmodel, meta_optimizer, inner_training_steps, nb_epochs, batch_size_K, alpha, task_sampler, nb_tasks=10, device='cpu'):
+def maml(params, fmodel, meta_optimizer, nb_epochs, inner_training_steps, batch_size_K, alpha, task_sampler, nb_tasks=10, device='cpu'):
     """
     Algorithm from https://arxiv.org/pdf/1703.03400v3.pdf (MAML for Few-Shot Supervised Learning)
     """

@@ -33,6 +33,7 @@ class LastConfig:
 
 @dataclass
 class LastConfigSmaller:
+    # Gaibo: I added this as a way to make LAST smaller on VRAM; this is not canon
     image_size: Tuple[int, int] = (128, 1876)
     hidden_dims: Tuple[int, int, int] = (48, 64, 72)
     channels: Tuple[int, int, int, int, int, int, int, int, int, int, int] = (16, 32, 48, 48, 64, 64, 80, 80, 96, 96, 384)

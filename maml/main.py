@@ -4,17 +4,21 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..'))  # See parent dir
 
 from models import MLP, mlp
 import torch
-from utils import set_random_seeds, clone_detach_params, replace_model_params
+from utils import set_random_seeds, clone_detach_params, replace_model_params, get_device
 import matplotlib.pyplot as plt
 from maml import perform_k_training_steps, maml, accuracy_on_mtask
 from tasks import sample_task, sample_mnisttask, sample_adimatask
 import numpy as np
 import functorch
-from config import LastConfig, LastConfigSmaller
+from config import LastConfig
 from last_model import LastAST
-from train_last import save_model_weights, train_epoch, test_model, load_weights
+# from train_last import save_model_weights, train_epoch, test_model, load_weights
 from torch.utils.data import DataLoader
 from loader import AudioDataset
+from config_maml import MAMLConfigADIMA
+from pathlib import Path
+from sklearn.metrics import f1_score
+from tqdm import tqdm
 
 def main_regression():
     set_random_seeds(42)
@@ -158,44 +162,134 @@ def main_mnist():
 
 ################################################################################
 
-set_random_seeds(42)
-print("Device count:", torch.cuda.device_count())
-if torch.cuda.is_available():
-    print("CUDA found!")
-    device = torch.device('cuda')
+# User decisions
+MODEL = 'LAST'
+MAML_CONFIG = MAMLConfigADIMA(n_tasks=4, num_epochs=500)
+# Automatic decisions
+print("Model:", MODEL)
+print("MAML Config:", MAML_CONFIG)
+DEVICE = get_device()
+set_random_seeds(MAML_CONFIG.random_seed)
+MAML_CONFIG_STRING = (
+    f'_seed{MAML_CONFIG.random_seed}'
+    f'_beta{MAML_CONFIG.meta_lr}'
+    f'_epochs{MAML_CONFIG.num_epochs}'
+    f'_innerupdates{MAML_CONFIG.inner_training_steps}'
+    f'_K{MAML_CONFIG.batch_size}'
+    f'_alpha{MAML_CONFIG.inner_lr}'
+    f'_tasksamples{MAML_CONFIG.n_tasks}'
+)
+MAML_CONFIG_PARAMS_SAVE_PATH = Path(
+    f'saves/{MODEL}/META_weights'
+    + MAML_CONFIG_STRING +
+    f'.pth'
+)   # NOTE: This will be really hard to edit later...
+
+####
+
+# Load model
+if MODEL == 'LAST':
+    model = LastAST(config=LastConfig())
 else:
-    print("Warning: using CPU...")
-    device = torch.device('cpu')
+    raise ValueError("Wrong MODEL")
+model.to(DEVICE)
+# print(model)
 
-# Load LAST
-config = LastConfig()
-# print("Configs of Model: ")
-# print(config)
+# Deconstruct torch model into functional part and parameters
+# NOTE: I'm aware functorch is obsolete
+fmodel, meta_params = functorch.make_functional(model)
 
-last_model = LastAST(config=config)
-last_model.to(device)
-print(last_model)
+# DON'T RUN MAML if config's saved parameters already exists!
+if not MAML_CONFIG_PARAMS_SAVE_PATH.exists():
+    # Run MAML, save results!
+    meta_optimizer = torch.optim.Adam(meta_params, lr=MAML_CONFIG.meta_lr)
+    training_loss = maml(meta_params, fmodel, meta_optimizer, 
+                        MAML_CONFIG.num_epochs, 
+                        MAML_CONFIG.inner_training_steps, 
+                        MAML_CONFIG.batch_size, 
+                        MAML_CONFIG.inner_lr, 
+                        sample_adimatask, 
+                        MAML_CONFIG.n_tasks,
+                        device=DEVICE)
+    print(f"Finished MAML training ({MAML_CONFIG.num_epochs} epochs)!")
 
-# mnist_model = MLP(784, 10, [300, 100], criterion_type='CrossEntropyLoss')
-# mnist_model.to(device)
-fmodel, params = functorch.make_functional(last_model)
-# og_params = clone_detach_params(params)     # LMAO these achieve 4%
-print(params[-1])
-set_random_seeds(42)
+    # Save weights!
+    replace_model_params(model, meta_params)   # Stick them back in...
+    torch.save(model.state_dict(), MAML_CONFIG_PARAMS_SAVE_PATH)
+    print(f"MAML weights saved to '{MAML_CONFIG_PARAMS_SAVE_PATH}'")
+    
+    # Save figure: MAML training loss
+    plt.title(f"Training Curve: ADIMA MAML (N=2-Way, K={MAML_CONFIG.batch_size}-Shot)")
+    plt.plot(training_loss, c='lightgreen', linestyle='--', 
+             linewidth=2.2, label=f'MAML Training Loss ({MAML_CONFIG.num_epochs} epochs)')
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss')
+    plt.legend()
+    plt.savefig(f'ADIMA_MAML_{MODEL}_trainingcurve'+MAML_CONFIG_STRING+'.png')
+    # plt.show()
+else:
+    # Just load the saved weights (parameters)
+    checkpoint = torch.load(MAML_CONFIG_PARAMS_SAVE_PATH, map_location=DEVICE)
+    model.load_state_dict(checkpoint)
+    # model.to(device)    # Is this necessary?
+    print(f"MAML weights found and loaded from '{MAML_CONFIG_PARAMS_SAVE_PATH}'")
 
-meta_optimizer = torch.optim.Adam(params, lr=1e-4)
-N_EPOCHS = 500
-training_loss = maml(params, fmodel, meta_optimizer, 1, N_EPOCHS, 4, 1e-4, sample_adimatask, device=device, nb_tasks=4)     # NOTE: for size, nb_tasks matters!
-# Save weights!
-replace_model_params(last_model, params)    # Stick them back in...
-save_model_weights(last_model, 'META_500_1en4_BEEG144', 3)
-# Save figure
-print(f"Finished MAML training {N_EPOCHS}!")
-plt.title('ADIMA MAML Test: N=2-Way, K=4-Shot Training')
-plt.plot(training_loss, c='lightgreen', linestyle='--', linewidth=2.2, label=f'MAML Training Loss ({N_EPOCHS} epochs)')
-plt.legend()
-plt.savefig(f'adima_trainingloss_epochs{N_EPOCHS}_seed42_500_1en4_BEEG144.png')
-plt.show()
+####
+
+# At this stage, model is primed by MAML and ready for K-shot testing!
+# i.e. 0-shot would be testing immediately, 1-shot would be training on 1 batch then testing, etc.
+# A reasonable K-shot might be K=5...
+
+# User decisions
+language = 'Hindi'
+# Automatic decisions
+train_dataset = AudioDataset(f"../data/files/SC_audio_{language}/", 
+                             f"../data/annotations/{language}_train.csv", hop_size=500)
+test_dataset = AudioDataset(f"../data/files/SC_audio_{language}/", 
+                            f"../data/annotations/{language}_test.csv", hop_size=500)
+train_dataloader = DataLoader(train_dataset, batch_size=MAML_CONFIG.batch_size, 
+                              shuffle=True, num_workers=1, pin_memory=True)
+test_dataloader = DataLoader(test_dataset, batch_size=MAML_CONFIG.batch_size, 
+                             shuffle=True, num_workers=1, pin_memory=True)
+# K_features, K_targets = next(iter(dataloader))
+criterion = torch.nn.CrossEntropyLoss()
+
+def test_model(model, dataloader, criterion, device):
+    model.eval()
+    correct_predictions = 0
+    total_samples = 0
+    total_loss = 0.0
+    all_preds, all_targets = [], []
+    
+    with torch.no_grad():
+        for inputs, targets in tqdm(dataloader):
+            inputs, targets = inputs.to(device), targets.to(device)
+            outputs = model(inputs.float()[:, :, :, :-1])
+            loss = criterion(outputs.view(-1, 2), targets.view(-1))
+            total_loss += loss.item()
+
+            _, predicted = torch.max(outputs, 1)
+            correct_predictions += (predicted == targets).sum().item()
+            total_samples += targets.size(0)
+
+            all_preds.extend(predicted.cpu().numpy())
+            all_targets.extend(targets.cpu().numpy())
+    
+    accuracy = correct_predictions / total_samples
+    average_loss = total_loss / len(dataloader)
+    f1 = f1_score(all_targets, all_preds)
+    return accuracy, average_loss, f1
+
+print(f"{language}: Running 0-shot evaluations...")
+train_accuracy, train_loss, train_f1 = test_model(model, train_dataloader, criterion, DEVICE)
+print(f"Training Accuracy: {train_accuracy}")
+print(f"Training Loss: {train_loss}")
+print(f"Training F1: {train_f1}")
+test_accuracy, test_loss, test_f1 = test_model(model, test_dataloader, criterion, DEVICE)
+print(f"Test Accuracy: {test_accuracy}")
+print(f"Test Loss: {test_loss}")
+print(f"Test F1: {test_f1}")
+
 
 # TODO: How to show MAML-ready state?
 # 0) Choose a task.

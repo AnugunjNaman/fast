@@ -12,6 +12,21 @@ def set_random_seeds(random_seed=0):
     torch.manual_seed(random_seed)
     torch.cuda.manual_seed(random_seed)
 
+def get_device(cuda_number=None, verbose=True):
+    if torch.cuda.is_available():
+        if verbose:
+            print(f"CUDA ({torch.cuda.device_count()} devices) found! Using GPU...")
+        if cuda_number:
+            device = torch.device(f'cuda:{cuda_number}')    # Specified GPU
+            if verbose:
+                print(f"Got GPU 'cuda:{cuda_number}'...")
+        else:
+            device = torch.device('cuda')   # Default CUDA device
+    else:
+        print("Warning: Using CPU...")
+        device = torch.device('cpu')
+    return device
+
 def clone_params(params_list):
     # Get copy of the parameters that can be worked independently but which still treat the OG parameters as leaves
     return [param.clone() for param in params_list]
