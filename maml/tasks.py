@@ -100,18 +100,53 @@ class ADIMATask:
                                          f"../data/annotations/{language}_test.csv", hop_size=500)
         self.train_dataset = AudioDataset(f"../data/files/SC_audio_{language}/", 
                                           f"../data/annotations/{language}_train.csv", hop_size=500)
-    def sample(self, K, test_set=False):
+    def sample(self, K, test_set=False, verbose=False):
         if test_set:
             dataloader = DataLoader(self.test_dataset, batch_size=2*K, shuffle=True, num_workers=1, pin_memory=True)
         else:
             dataloader = DataLoader(self.train_dataset, batch_size=2*K, shuffle=True, num_workers=1, pin_memory=True)
-        K_features, K_targets = next(iter(dataloader))
-        # TODO: Ensure there's K of each class; right now I'm shortcutting to just 2K - they may be imbalanced
-        return K_features, K_targets, nn.CrossEntropyLoss()
+        # NOTE: Ensure there's K of each class
+        # K_features, K_targets = next(iter(dataloader))    # Sampling 2K works but doesn't ensure K pos and K neg - imbalance adds noise!
+        positives_acc = 0   # Need this to get to K
+        negatives_acc = 0   # Need this to get to K
+        repeats = 0
+        K_features_list = []
+        K_targets_list = []
+        while True:
+            # Get batch
+            K_features, K_targets = next(iter(dataloader))
+            positives = K_targets.sum()
+            negatives = 2*K - positives
+            # See if we have enough positives and negatives now
+            K_features_list.append(K_features)
+            K_targets_list.append(K_targets)
+            positives_acc += positives
+            negatives_acc += negatives
+            if positives_acc >= K and negatives_acc >= K:
+                break
+            repeats += 1
+        if verbose:
+            print(f"Repeated batch collections: {repeats}")
+        repeated_features_concat = torch.concat(K_features_list)
+        repeated_targets_concat = torch.concat(K_targets_list)
+        pos_locs = (repeated_targets_concat == 1)
+        K_features_pos = repeated_features_concat[pos_locs][:K]
+        K_features_neg = repeated_features_concat[~pos_locs][:K]
+        K_targets_pos = repeated_targets_concat[pos_locs][:K]
+        K_targets_neg = repeated_targets_concat[~pos_locs][:K]
+        K_features = torch.concat([K_features_pos, K_features_neg])
+        K_targets = torch.concat([K_targets_pos, K_targets_neg])
+        random_idx = torch.randperm(K_targets.shape[0])
+        return K_features[random_idx], K_targets[random_idx], nn.CrossEntropyLoss()
 
 # Return either Hindi, Bengali, or Punjabi task
 def sample_adimatask():
-    lang_selector = np.random.randint(0, 3)
+    try:
+        sample_adimatask.ORDER_GLOBAL   # Static variable
+    except AttributeError:
+        sample_adimatask.ORDER_GLOBAL = 0   # Start with Hindi
+    lang_selector = sample_adimatask.ORDER_GLOBAL
+    # lang_selector = np.random.randint(0, 3)
     if lang_selector == 0:
         language = 'Hindi'
     elif lang_selector == 1:
@@ -120,4 +155,5 @@ def sample_adimatask():
         language = 'Punjabi'
     else:
         raise ValueError("lang_selector shouldn't be anything else")
+    sample_adimatask.ORDER_GLOBAL = (sample_adimatask.ORDER_GLOBAL+1)%3     # "Next" language in cycle on next sample
     return ADIMATask(language)

@@ -59,8 +59,9 @@ def clone_model(model):
 
 def replace_model_params(model, new_params):
     state_dict = model.state_dict()
-    for key, new_value in zip(state_dict.keys(), new_params):
-        state_dict[key] = new_value     # Overwrite old param
+    param_keys = [k for k in state_dict.keys() if "weight" in k or "bias" in k]     # This is so jank
+    for key, new_value in zip(param_keys, new_params):
+        state_dict[key] = new_value     # Overwrite old param; old buffers left intact
     model.load_state_dict(state_dict)
 
 def save_training_curve(train_loss, train_acc, test_acc, 

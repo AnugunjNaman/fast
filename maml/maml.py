@@ -2,19 +2,22 @@ import numpy as np
 from tqdm import tqdm
 from torch.autograd import grad
 
-def predict(fmodel, params, features):
+def predict(fmodel, params, features, buffers=None):
     features = features.float()[:, :, :, :-1]
-    predicted_logits = fmodel(params, features)
+    if buffers:
+        predicted_logits = fmodel(params, buffers, features)
+    else:
+        predicted_logits = fmodel(params, features)
     return predicted_logits.argmax(dim=1)   # Summarizes each row to index of biggest value
 
-def accuracy_on_mtask(fmodel, params, mtask, device):
-    predicted_ab_targets = predict(fmodel, params, mtask.ab_features.to(device))
+def accuracy_on_mtask(fmodel, params, mtask, device, buffers=None):
+    predicted_ab_targets = predict(fmodel, params, mtask.ab_features.to(device), buffers=buffers)
     acc_train = (predicted_ab_targets == mtask.ab_targets.to(device)).float().mean().item()
-    predicted_ab_targets_test = predict(fmodel, params, mtask.ab_features_test.to(device))
+    predicted_ab_targets_test = predict(fmodel, params, mtask.ab_features_test.to(device), buffers=buffers)
     acc_test = (predicted_ab_targets_test == mtask.ab_targets_test.to(device)).float().mean().item()
     return acc_train, acc_test
 
-def perform_k_training_steps(params, fmodel, task, batch_size, inner_training_steps, alpha, device='cpu', verbose=False):
+def perform_k_training_steps(params, fmodel, task, batch_size, inner_training_steps, alpha, device='cpu', verbose=False, buffers=None):
     # print("****perform start:")
     # print(params[-1])
     loss_list = []
@@ -23,7 +26,10 @@ def perform_k_training_steps(params, fmodel, task, batch_size, inner_training_st
     for epoch in range(inner_training_steps):
         x_batch, target, loss_fct = task.sample(batch_size)
         x_batch = x_batch.float()[:, :, :, :-1]
-        loss = loss_fct(fmodel(params, x_batch.to(device)), target.to(device))
+        if buffers:
+            loss = loss_fct(fmodel(params, buffers, x_batch.to(device)), target.to(device))
+        else:
+            loss = loss_fct(fmodel(params, x_batch.to(device)), target.to(device))
 
         for p in params:  # Zero grad
             p.grad = None
@@ -32,7 +38,7 @@ def perform_k_training_steps(params, fmodel, task, batch_size, inner_training_st
             p.data -= alpha * g
         
         if verbose:
-            acc_train, acc_test = accuracy_on_mtask(fmodel, params, task, device)
+            acc_train, acc_test = accuracy_on_mtask(fmodel, params, task, device, buffers=buffers)
             print(f"Epoch {epoch+1}, Loss: {loss.item():.4f}; Accuracy (Training Set): {acc_train:.4f}, Accuracy (Test Set): {acc_test:.4f}")            
             loss_list.append(loss.item())
             acc_train_list.append(acc_train)
@@ -63,7 +69,7 @@ def perform_k_training_steps(params, fmodel, task, batch_size, inner_training_st
 #         print("Finished training!")
 #     optimizer.zero_grad()   # Wipe these clones' .grads (in case my code assumes this later)
 
-def maml(params, fmodel, meta_optimizer, nb_epochs, inner_training_steps, batch_size_K, alpha, task_sampler, nb_tasks=10, device='cpu'):
+def maml(params, fmodel, meta_optimizer, nb_epochs, inner_training_steps, batch_size_K, alpha, task_sampler, nb_tasks=10, device='cpu', buffers=None):
     """
     Algorithm from https://arxiv.org/pdf/1703.03400v3.pdf (MAML for Few-Shot Supervised Learning)
     """
@@ -78,7 +84,7 @@ def maml(params, fmodel, meta_optimizer, nb_epochs, inner_training_steps, batch_
         for task in tasks:
             cloned_params = [p.clone() for p in params]
             perform_k_training_steps(cloned_params, fmodel, task, batch_size_K,
-                                     inner_training_steps, alpha, device=device)
+                                     inner_training_steps, alpha, device=device, buffers=buffers)
             theta_i_prime.append(cloned_params)
             # Sample data points Di' for the meta-update (line 8 in the pseudocode)
             x, y, loss_fct = task.sample(batch_size_K)  # NOTE: This technically doesn't need to be the same as K...
@@ -93,7 +99,10 @@ def maml(params, fmodel, meta_optimizer, nb_epochs, inner_training_steps, batch_
             f_theta_prime = theta_i_prime[i]
             # Compute \nabla_theta L(f_theta_i_prime) for task ti
             x = x.float()[:, :, :, :-1]
-            loss = loss_fct(fmodel(f_theta_prime, x.to(device)), y.to(device))
+            if buffers:
+                loss = loss_fct(fmodel(f_theta_prime, buffers, x.to(device)), y.to(device))
+            else:
+                loss = loss_fct(fmodel(f_theta_prime, x.to(device)), y.to(device))
             # loss.backward()
             losses.append(loss)
             batch_training_loss.append(loss.item())
