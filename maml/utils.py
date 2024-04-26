@@ -15,7 +15,7 @@ def set_random_seeds(random_seed=0):
 def get_device(cuda_number=None, verbose=True):
     if torch.cuda.is_available():
         if verbose:
-            print(f"CUDA ({torch.cuda.device_count()} devices) found! Using GPU...")
+            print(f"CUDA ({torch.cuda.device_count()} device(s)) found! Using GPU...")
         if cuda_number:
             device = torch.device(f'cuda:{cuda_number}')    # Specified GPU
             if verbose:

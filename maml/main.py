@@ -21,6 +21,9 @@ from pathlib import Path
 from sklearn.metrics import f1_score
 from tqdm import tqdm
 import csv
+import argparse
+import warnings
+warnings.filterwarnings('ignore', category=UserWarning)
 
 def main_regression():
     set_random_seeds(42)
@@ -164,9 +167,24 @@ def main_mnist():
 
 ################################################################################
 
+parser = argparse.ArgumentParser(description='MAML training/testing script.')
+# Add arguments
+parser.add_argument('--model', type=str, default='LAST', help='LAST (Lipschitz augmented) or FAST model.',
+                    choices=['LAST', 'FAST'])
+parser.add_argument('--num_epochs', type=int, default=400, help='Number of epochs for training MAML.')
+parser.add_argument('--batch_size', type=int, default=4, help='Batch size for everywhere that loads data - set low until it fits on VRAM.')
+parser.add_argument('--n_tasks', type=int, default=3, help='Number of tasks to sample for each MAML training loop.')
+parser.add_argument('--meta_lr', type=float, default=1e-4, help='"beta" - Learning rate for meta-learning training loop.')
+parser.add_argument('--inner_lr', type=float, default=1e-4, help='"alpha" - Learning rate for "inner" gradient descent.')
+parser.add_argument('--test_language', type=str, default='All', help='Language for testing.', 
+                    choices=['All', 'Hindi', 'Bengali', 'Punjabi'])
+# Parse the arguments
+args = parser.parse_args()
+
 # User decisions
-MODEL = 'FAST'
-MAML_CONFIG = MAMLConfigADIMA(num_epochs=400, batch_size=4, n_tasks=3)
+MODEL = args.model
+MAML_CONFIG = MAMLConfigADIMA(num_epochs=args.num_epochs, batch_size=args.batch_size, n_tasks=args.n_tasks,
+                              meta_lr=args.meta_lr, inner_lr=args.inner_lr)
 # Automatic decisions
 print("Model:", MODEL)
 print("MAML Config:", MAML_CONFIG)
@@ -290,10 +308,15 @@ def test_model(model, dataloader, criterion, device, model_train=False):
     f1 = f1_score(all_targets, all_preds)
     return accuracy, average_loss, f1
 
-# # User decisions
-# language = 'Hindi'
-# Automatic decisions
-for language in ['Hindi', 'Bengali', 'Punjabi', 'Hindi']:
+# User decisions
+if args.test_language == 'All':
+    if buffers is not None:
+        languages = ['Hindi', 'Bengali', 'Punjabi', 'Hindi']    # FAST buffers need warmup...
+    else:
+        languages = ['Hindi', 'Bengali', 'Punjabi']     # LAST doesn't
+else:
+    languages = [args.test_language]
+for language in languages:
     train_dataset = AudioDataset(f"../data/files/SC_audio_{language}/", 
                                  f"../data/annotations/{language}_train.csv", hop_size=500)
     test_dataset = AudioDataset(f"../data/files/SC_audio_{language}/", 
@@ -305,7 +328,7 @@ for language in ['Hindi', 'Bengali', 'Punjabi', 'Hindi']:
     # K_features, K_targets = next(iter(dataloader))
     criterion = torch.nn.CrossEntropyLoss()
 
-    print(f"{language}: Running 0-shot evaluations...")
+    print(f"\n{language}: Running 0-shot evaluations...")
     train_accuracy, train_loss, train_f1 = test_model(model, train_dataloader, criterion, DEVICE, buffers is not None)
     print(f"Training Accuracy: {train_accuracy}")
     print(f"Training Loss: {train_loss}")
