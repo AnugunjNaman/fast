@@ -34,7 +34,8 @@ parser.add_argument('--n_tasks', type=int, default=3, help='Number of tasks to s
 parser.add_argument('--meta_lr', type=float, default=1e-4, help='"beta" - Learning rate for meta-learning training loop.')
 parser.add_argument('--inner_lr', type=float, default=1e-4, help='"alpha" - Learning rate for "inner" gradient descent.')
 parser.add_argument('--test_language', type=str, default='All', help='Language for testing.', 
-                    choices=['All', 'Hindi', 'Bengali', 'Punjabi'])
+                    choices=['All', 'Hindi', 'Bengali', 'Punjabi', 'Haryanvi', 'Kannada', 
+                                    'Odia', 'Bhojpuri', 'Gujarati', 'Tamil', 'Malayalam'])
 # Parse the arguments
 args = parser.parse_args()
 
@@ -173,9 +174,14 @@ def test_model(model, dataloader, criterion, device, model_train=False):
 # User decisions
 if args.test_language == 'All':
     if buffers is not None:
-        languages = ['Hindi', 'Bengali', 'Punjabi', 'Hindi']    # FAST buffers need warmup...
+        # languages = ['Hindi', 'Bengali', 'Punjabi', 'Hindi']    # FAST buffers need warmup...
+        languages = ['Hindi', 'Bengali', 'Punjabi', 'Haryanvi', 'Kannada', 
+                     'Odia', 'Bhojpuri', 'Gujarati', 'Tamil', 'Malayalam']
     else:
-        languages = ['Hindi', 'Bengali', 'Punjabi']     # LAST doesn't
+        # languages = ['Hindi', 'Bengali', 'Punjabi']     # LAST doesn't
+        languages = ['Hindi', 'Bengali', 'Punjabi', 'Haryanvi', 'Kannada', 
+                     'Odia', 'Bhojpuri', 'Gujarati', 'Tamil', 'Malayalam']
+        # languages = ['Bengali', 'Hindi']
 else:
     languages = [args.test_language]
 for language in languages:
@@ -220,8 +226,9 @@ def train_epoch(model, dataloader, optimizer, criterion, device):
     return average_loss
 
 for language in languages:
+    set_random_seeds(MAML_CONFIG.random_seed)   # NOTE: Maintain reproducibility
     atask = ADIMATask(language)
-    shot_features, shot_targets, shot_criterion = atask.sample(args.batch_size, test_set=False)
+    shot_features, shot_targets, shot_criterion = atask.sample(args.batch_size, test_set=False)     # NOTE: This is affected by randomness
     cloned_model = clone_model(model)
     shot_optimizer = torch.optim.SGD(cloned_model.parameters(), lr=args.inner_lr)
     shot_avg_loss = train_epoch(cloned_model, [(shot_features, shot_targets)], shot_optimizer, shot_criterion, DEVICE)
