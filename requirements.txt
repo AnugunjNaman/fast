@@ -1,0 +1,10 @@
+torch
+pandas
+scikit-learn
+einops
+numpy
+thop
+librosa
+matplotlib
+packaging
+tqdm
