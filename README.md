@@ -148,4 +148,9 @@ CUDA non-determinism can shift a retrain slightly. The table is defined by `pyth
 }
 ```
 
+## Work that used FAST
+
+- [DuSAFNet: A Multi-Path Feature Fusion and Spectral–Temporal Attention-Based Model for Bird Audio Classification](https://www.mdpi.com/2076-2615/15/15/2228)
+- [Classification of Instrumental Music Sound Based on Spread Characteristics and Networks Accumulated](https://jshou.edu.vn/houjs/article/view/729)
+
 Questions: [anaman@purdue.edu](mailto:anaman@purdue.edu)
